@@ -3,7 +3,7 @@ import { Browser } from "@capacitor/browser";
 import { PushNotifications } from "@capacitor/push-notifications";
 import type { Socket } from "socket.io-client";
 
-export const APP_VERSION = "1.0.2";
+export const APP_VERSION = "1.0.3";
 const RELEASES_ENDPOINT = "https://api.github.com/repos/Igu2012/ResenhaChat/releases/latest";
 const RESENHA_API_ORIGIN = (import.meta.env.VITE_RESENHA_SERVER_URL || "https://resenhudochat.onrender.com").replace(/\/+$/, "");
 
