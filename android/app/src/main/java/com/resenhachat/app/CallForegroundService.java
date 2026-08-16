@@ -125,7 +125,6 @@ public class CallForegroundService extends Service {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       int type = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
       if (cameraActive) type |= android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
-      if (sharingScreen) type |= android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION;
       startForeground(NOTIFICATION_ID, notification, type);
     } else startForeground(NOTIFICATION_ID, notification);
   }

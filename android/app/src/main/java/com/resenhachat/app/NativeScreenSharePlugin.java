@@ -31,7 +31,7 @@ import java.nio.ByteBuffer;
 
 @CapacitorPlugin(name = "NativeScreenShare")
 public class NativeScreenSharePlugin extends Plugin {
-  private static final long FRAME_INTERVAL_MS = 420;
+  private static final long FRAME_INTERVAL_MS = 750;
   private MediaProjection projection;
   private VirtualDisplay virtualDisplay;
   private ImageReader imageReader;
@@ -58,12 +58,12 @@ public class NativeScreenSharePlugin extends Plugin {
       return;
     }
     try {
-      ScreenProjectionService.start(getContext());
       MediaProjectionManager manager = (MediaProjectionManager) getContext().getSystemService(Context.MEDIA_PROJECTION_SERVICE);
       projection = manager.getMediaProjection(result.getResultCode(), result.getData());
       if (projection == null) throw new IllegalStateException("Não foi possível iniciar a projeção de tela.");
+      ScreenProjectionService.start(getContext());
       DisplayMetrics metrics = getContext().getResources().getDisplayMetrics();
-      float scale = Math.min(1f, 720f / Math.max(metrics.widthPixels, metrics.heightPixels));
+      float scale = Math.min(1f, 480f / Math.max(metrics.widthPixels, metrics.heightPixels));
       outputWidth = Math.max(2, ((int) (metrics.widthPixels * scale)) & ~1);
       outputHeight = Math.max(2, ((int) (metrics.heightPixels * scale)) & ~1);
       captureThread = new HandlerThread("resenha-screen-capture");
@@ -100,7 +100,7 @@ public class NativeScreenSharePlugin extends Plugin {
       padded.copyPixelsFromBuffer(buffer);
       Bitmap cropped = Bitmap.createBitmap(padded, 0, 0, outputWidth, outputHeight);
       ByteArrayOutputStream output = new ByteArrayOutputStream();
-      cropped.compress(Bitmap.CompressFormat.JPEG, 55, output);
+      cropped.compress(Bitmap.CompressFormat.JPEG, 45, output);
       cropped.recycle();
       padded.recycle();
       JSObject frame = new JSObject();
