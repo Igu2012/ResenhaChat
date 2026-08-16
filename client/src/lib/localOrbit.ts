@@ -63,11 +63,12 @@ export type OrbitStore = {
   groups: LocalGroup[];
   messages: Record<string, LocalMessage[]>;
   requests: LocalRequest[];
+  unreadRooms?: Record<string, { count: number; mentions: number }>;
 };
 
 const STORAGE_KEY = "orbit-chat.local-store.v2";
 const ACCOUNT_VAULT_KEY = "resenha-chat.account-vault.v1";
-const EMPTY_STORE: OrbitStore = { profile: null, contacts: [], groups: [], messages: {}, requests: [] };
+const EMPTY_STORE: OrbitStore = { profile: null, contacts: [], groups: [], messages: {}, requests: [], unreadRooms: {} };
 
 export type LocalAccountRecord = {
   id: string;
@@ -94,6 +95,7 @@ export function redactOrbitStore(store: OrbitStore): OrbitStore {
     groups: (store.groups || []).map(group => ({ ...group, members: (group.members || []).map(redactAuthor) })),
     requests: (store.requests || []).map(request => ({ ...request, from: redactAuthor(request.from), group: request.group ? { ...request.group, members: (request.group.members || []).map(redactAuthor) } : undefined })),
     messages: Object.fromEntries(Object.entries(store.messages || {}).map(([roomId, messages]) => [roomId, messages.map(message => ({ ...message, author: redactAuthor(message.author) }))])),
+    unreadRooms: { ...(store.unreadRooms || {}) },
   };
 }
 
@@ -131,7 +133,7 @@ export function accountStoreForSwitch(record: LocalAccountRecord): OrbitStore {
 }
 
 export function createEmptyOrbitStore(): OrbitStore {
-  return { profile: null, contacts: [], groups: [], messages: {}, requests: [] };
+  return { profile: null, contacts: [], groups: [], messages: {}, requests: [], unreadRooms: {} };
 }
 
 export type OfficialSession = { uid: string; username: string; displayName?: string; idToken?: string };
@@ -159,6 +161,7 @@ export function readOrbitStore(): OrbitStore {
       groups: Array.isArray(parsed.groups) ? parsed.groups : [],
       messages: parsed.messages && typeof parsed.messages === "object" ? parsed.messages : {},
       requests: Array.isArray(parsed.requests) ? parsed.requests : [],
+      unreadRooms: parsed.unreadRooms && typeof parsed.unreadRooms === "object" ? parsed.unreadRooms : {},
     };
   } catch {
     return EMPTY_STORE;
@@ -178,6 +181,7 @@ function cloneOrbitStore(store: OrbitStore): OrbitStore {
     contacts: [...store.contacts],
     groups: [...store.groups],
     messages: Object.fromEntries(Object.entries(store.messages).map(([roomId, messages]) => [roomId, messages.map(message => ({ ...message, attachment: message.attachment ? { ...message.attachment } : null }))])),
+    unreadRooms: { ...(store.unreadRooms || {}) },
   };
 }
 
@@ -192,7 +196,10 @@ function tryWrite(storage: Storage, store: OrbitStore) {
 
 export function writeOrbitStore(store: OrbitStore, storage: Storage = localStorage): OrbitStoreWriteResult {
   const persistedStore = redactOrbitStore(store);
-  if (tryWrite(storage, persistedStore)) return { saved: true, store, droppedAttachments: 0, clearedProfileAvatar: false };
+  if (tryWrite(storage, persistedStore)) {
+    if (persistedStore.profile) saveAccountSnapshot(persistedStore, storage);
+    return { saved: true, store, droppedAttachments: 0, clearedProfileAvatar: false };
+  }
 
   const compacted = cloneOrbitStore(persistedStore);
   const attachments = Object.entries(compacted.messages)
@@ -207,12 +214,18 @@ export function writeOrbitStore(store: OrbitStore, storage: Storage = localStora
     message.attachment = null;
     message.attachmentUnavailable = true;
     droppedAttachments += 1;
-    if (tryWrite(storage, compacted)) return { saved: true, store: { ...compacted, profile: store.profile }, droppedAttachments, clearedProfileAvatar: false };
+    if (tryWrite(storage, compacted)) {
+      if (compacted.profile) saveAccountSnapshot(compacted, storage);
+      return { saved: true, store: { ...compacted, profile: store.profile }, droppedAttachments, clearedProfileAvatar: false };
+    }
   }
 
   if (compacted.profile?.avatarUrl) {
     compacted.profile.avatarUrl = null;
-    if (tryWrite(storage, compacted)) return { saved: true, store: { ...compacted, profile: store.profile }, droppedAttachments, clearedProfileAvatar: true };
+    if (tryWrite(storage, compacted)) {
+      if (compacted.profile) saveAccountSnapshot(compacted, storage);
+      return { saved: true, store: { ...compacted, profile: store.profile }, droppedAttachments, clearedProfileAvatar: true };
+    }
   }
 
   return { saved: false, store, droppedAttachments: 0, clearedProfileAvatar: false };

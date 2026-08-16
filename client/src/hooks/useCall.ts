@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
-import { beginNativeCallSession, endNativeCallSession, isNativeRuntime, requestNativeCallOverlayPermission, setNativeCallOverlayVisible, startNativeScreenCapture, type NativeScreenCapture, updateNativeCallSession } from "@/lib/nativeRuntime";
+import { beginNativeCallSession, endNativeCallSession, isNativeRuntime, requestNativeCallOverlayPermission, requestNativeMediaPermission, setNativeCallOverlayVisible, startNativeScreenCapture, type NativeScreenCapture, updateNativeCallSession } from "@/lib/nativeRuntime";
 
 type CallProfile = { id: string; displayName: string; avatarUrl: string | null };
 type RemotePeer = { socketId: string; stream: MediaStream; profile: CallProfile; sharingScreen: boolean };
@@ -254,14 +254,30 @@ export function useCall(socket: Socket | null) {
   const joinRoomWithMedia = useCallback(async (nextRoom: string, withVideo: boolean) => {
     if (!socket) throw new Error("A conexão em tempo real ainda não está disponível.");
     let stream: MediaStream;
+    let cameraEnabled = withVideo;
+    const audioConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+    const nativePermission = await requestNativeMediaPermission({ camera: withVideo, microphone: true });
+    if (!nativePermission.microphone) throw new Error("Permita o microfone nas configurações do Android para entrar na chamada.");
+    if (withVideo && !nativePermission.camera) {
+      cameraEnabled = false;
+      setError("A câmera não foi permitida. A chamada continuará somente com áudio; toque no botão de câmera para tentar novamente.");
+    }
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: withVideo ? { facingMode: { ideal: facingModeRef.current }, width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 24, max: 30 } } : false,
+        audio: audioConstraints,
+        video: cameraEnabled ? { facingMode: { ideal: facingModeRef.current }, width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 24, max: 30 } } : false,
       });
     } catch (error) {
-      if (!withVideo) throw error;
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: true });
+      if (!cameraEnabled) throw error;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+        cameraEnabled = false;
+        setError("A câmera foi recusada pelo Android ou pelo WebView. A chamada continuará somente com áudio.");
+      } catch {
+        const name = error instanceof DOMException ? error.name : "";
+        if (name === "NotAllowedError" || name === "SecurityError") throw new Error("Permita o microfone para entrar na chamada. A câmera pode ser ativada depois.");
+        throw error;
+      }
     }
     streamRef.current = stream;
     cameraTrackRef.current = stream.getVideoTracks()[0] || null;
@@ -273,13 +289,14 @@ export function useCall(socket: Socket | null) {
     roomRef.current = nextRoom;
     setLocalStream(stream);
     setRoom(nextRoom);
-    setCameraOff(!withVideo);
+    setCameraOff(!cameraEnabled);
     await new Promise<void>((resolve, reject) => {
       socket.emit("call:join", { room: nextRoom }, (result: { ok: boolean; message?: string }) => {
         if (result.ok) resolve();
         else reject(new Error(result.message || "Não foi possível entrar na chamada."));
       });
     });
+    return cameraEnabled;
   }, [socket]);
 
   useEffect(() => {
@@ -353,12 +370,12 @@ export function useCall(socket: Socket | null) {
     try {
       setError(null);
       liveAudienceRef.current = liveAudienceIds;
-      await joinRoomWithMedia(nextRoom, withVideo);
+      const cameraEnabled = await joinRoomWithMedia(nextRoom, withVideo);
       if (!notifyRecipients) {
         setOutgoingCall(false);
         return;
       }
-      socket.emit("call:invite", { room: nextRoom, recipientIds, withVideo }, (result: { ok: boolean; message?: string }) => {
+      socket.emit("call:invite", { room: nextRoom, recipientIds, withVideo: cameraEnabled }, (result: { ok: boolean; message?: string }) => {
         if (!result.ok) {
           setError(result.message || "Ninguém recebeu o convite de chamada.");
           endCall();
@@ -402,13 +419,15 @@ export function useCall(socket: Socket | null) {
     const track = cameraTrackRef.current;
     if (!track || track.readyState === "ended") {
       try {
+        const permission = await requestNativeMediaPermission({ camera: true, microphone: false });
+        if (!permission.camera) throw new Error("Permita a câmera nas configurações do Android para ativar o vídeo.");
         const cameraStream = await captureCamera(facingModeRef.current);
         const nextTrack = cameraStream.getVideoTracks()[0];
         if (!nextTrack) throw new Error("Nenhuma câmera foi encontrada.");
         await publishCameraTrack(nextTrack);
         setCameraOff(false);
-      } catch {
-        setError("Não foi possível iniciar a câmera. Verifique a permissão do navegador.");
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Não foi possível iniciar a câmera. Verifique a permissão nas configurações do Android.");
       }
       return;
     }

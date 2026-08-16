@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { beginNativeCallSession, getLatestReleaseDownload, isNewerVersion, requestNativeNotificationPermission, setNativeCallOverlayVisible } from "./nativeRuntime";
+import { beginNativeCallSession, getLatestReleaseDownload, isNewerVersion, requestNativeMediaPermission, requestNativeNotificationPermission, setNativeCallOverlayVisible } from "./nativeRuntime";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -31,5 +31,6 @@ describe("ponte de chamada nativa", () => {
     await expect(beginNativeCallSession(session)).resolves.toEqual({ overlayAllowed: false });
     await expect(setNativeCallOverlayVisible(true)).resolves.toEqual({ overlayAllowed: false });
     await expect(requestNativeNotificationPermission()).resolves.toBe(false);
+    await expect(requestNativeMediaPermission({ camera: true, microphone: true })).resolves.toEqual({ camera: true, microphone: true });
   });
 });

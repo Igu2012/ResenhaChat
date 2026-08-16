@@ -1,6 +1,6 @@
 # Resenha Chat — Cliente
 
-Este repositório contém exclusivamente o **cliente estático** do Resenha Chat, destinado ao deploy no Vercel e ao build da APK Android. A API, o Socket.io, Firebase, Klipy e demais variáveis privadas permanecem no repositório [`Igu2012/redesocial`](https://github.com/Igu2012/redesocial), hospedado no Render em `https://resenhudochat.onrender.com`.
+Este repositório contém exclusivamente o **cliente estático** do Resenha Chat, destinado ao deploy no Vercel e ao build da APK Android. A API, Socket.io, Firebase, Klipy e demais variáveis privadas operam no serviço Render em `https://resenhudochat.onrender.com` e não fazem parte deste repositório público.
 
 ## Vercel
 

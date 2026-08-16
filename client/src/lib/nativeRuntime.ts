@@ -3,7 +3,7 @@ import { Browser } from "@capacitor/browser";
 import { PushNotifications } from "@capacitor/push-notifications";
 import type { Socket } from "socket.io-client";
 
-export const APP_VERSION = "1.0.1";
+export const APP_VERSION = "1.0.2";
 const RELEASES_ENDPOINT = "https://api.github.com/repos/Igu2012/ResenhaChat/releases/latest";
 const RESENHA_API_ORIGIN = (import.meta.env.VITE_RESENHA_SERVER_URL || "https://resenhudochat.onrender.com").replace(/\/+$/, "");
 
@@ -24,6 +24,12 @@ type NativeCallOverlayPlugin = {
 };
 
 const NativeCallOverlay = registerPlugin<NativeCallOverlayPlugin>("NativeCallOverlay");
+
+type NativeMediaPermissionPlugin = {
+  request: (options: { camera?: boolean; microphone?: boolean }) => Promise<{ camera?: "granted" | "denied"; microphone?: "granted" | "denied" }>;
+};
+
+const NativeMediaPermission = registerPlugin<NativeMediaPermissionPlugin>("NativeMediaPermission");
 
 export type NativeCallSession = { title: string; participants: number; participantLabel: string; cameraActive: boolean; sharingScreen: boolean };
 
@@ -155,6 +161,19 @@ export async function requestNativeNotificationPermission() {
     return permission.receive === "granted";
   } catch {
     return false;
+  }
+}
+
+export async function requestNativeMediaPermission(options: { camera: boolean; microphone: boolean }) {
+  if (!isNativeRuntime()) return { camera: true, microphone: true };
+  try {
+    const result = await NativeMediaPermission.request(options);
+    return {
+      camera: !options.camera || result.camera === "granted",
+      microphone: !options.microphone || result.microphone === "granted",
+    };
+  } catch {
+    return { camera: false, microphone: false };
   }
 }
 

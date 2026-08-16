@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { accountStoreForSwitch, applyOfficialSession, createEmptyOrbitStore, directRoomId, migrateGuestToOfficial, readAccountVault, saveAccountSnapshot, writeOrbitStore, type OrbitStore } from "./localOrbit";
+import { accountStoreForSwitch, applyOfficialSession, createEmptyOrbitStore, directRoomId, migrateGuestToOfficial, readAccountVault, readOrbitStore, saveAccountSnapshot, writeOrbitStore, type OrbitStore } from "./localOrbit";
 
 const STORAGE_KEY = "orbit-chat.local-store.v2";
 
@@ -102,5 +102,26 @@ describe("writeOrbitStore", () => {
     expect(reentered.messages["dm:guest:friend"]).toBeUndefined();
     saveAccountSnapshot(reentered);
     expect(localStorage.getItem("resenha-chat.account-vault.v1")).not.toContain("token-recebido-apos-senha");
+  });
+
+  it("persiste a vida social e o envelope E2EE no cofre da própria conta", () => {
+    const profile = { id: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "Oi", avatarUrl: "data:image/png;base64,avatar", accountType: "official" as const, username: "ana", encryptionPublicKey: { kty: "EC", crv: "P-256", x: "x", y: "y", ext: true } };
+    const contact = { id: "bia", connectionCode: "BIA123", displayName: "Bia", bio: "", avatarUrl: null, encryptionPublicKey: { kty: "EC", crv: "P-256", x: "x2", y: "y2", ext: true } };
+    const store: OrbitStore = {
+      profile,
+      contacts: [contact],
+      groups: [{ id: "grupo", name: "Teste", imageUrl: null, ownerId: "ana", members: [profile, contact], channels: [{ id: "geral", name: "geral" }] }],
+      requests: [{ id: "pedido", kind: "contact", from: contact, createdAt: "2026-08-16T00:00:00.000Z" }],
+      unreadRooms: { "dm:ana:bia": { count: 2, mentions: 1 } },
+      messages: { "dm:ana:bia": [{ id: "segura", roomId: "dm:ana:bia", author: contact, body: "Mensagem local", attachment: null, createdAt: "2026-08-16T00:00:00.000Z", encrypted: { version: 1, recipients: { ana: { version: 1, iv: "iv", ciphertext: "cipher" } } } }] },
+    };
+
+    expect(writeOrbitStore(store).saved).toBe(true);
+    expect(readOrbitStore().messages["dm:ana:bia"][0].encrypted?.recipients.ana.ciphertext).toBe("cipher");
+    const restored = accountStoreForSwitch(readAccountVault().find(account => account.id === "ana")!);
+    expect(restored.contacts[0].displayName).toBe("Bia");
+    expect(restored.groups[0].channels[0].name).toBe("geral");
+    expect(restored.requests[0].id).toBe("pedido");
+    expect(restored.unreadRooms?.["dm:ana:bia"].mentions).toBe(1);
   });
 });

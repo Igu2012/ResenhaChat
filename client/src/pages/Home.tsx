@@ -254,7 +254,7 @@ export default function Home() {
 	  const [switchingAccount, setSwitchingAccount] = useState<LocalAccountRecord | null>(null);
 	  const [accountVault, setAccountVault] = useState<LocalAccountRecord[]>(() => readAccountVault());
 	  const [upgradingGuest, setUpgradingGuest] = useState(false);
-	  const [unreadRooms, setUnreadRooms] = useState<Record<string, { count: number; mentions: number }>>({});
+	  const [unreadRooms, setUnreadRooms] = useState<Record<string, { count: number; mentions: number }>>(() => store.unreadRooms || {});
   const profileRef = useRef<LocalProfile | null>(store.profile);
 	  const activeRoomRef = useRef<ActiveRoom | null>(activeRoom);
   const contactIdsRef = useRef<string[]>(store.contacts.map(contact => contact.id));
@@ -282,6 +282,14 @@ export default function Home() {
 	    const parts = [result.droppedAttachments ? `${result.droppedAttachments} anexo(s) recente(s) não coube(ram) neste dispositivo` : null, result.clearedProfileAvatar ? "a foto do perfil foi removida da cópia local" : null].filter(Boolean);
 	    toast.warning(`Espaço insuficiente: ${parts.join(" e ")}. As mensagens foram mantidas.`);
 	  }, [store]);
+
+	  useEffect(() => {
+	    setStore(current => {
+	      const previous = current.unreadRooms || {};
+	      if (JSON.stringify(previous) === JSON.stringify(unreadRooms)) return current;
+	      return { ...current, unreadRooms };
+	    });
+	  }, [unreadRooms]);
 
 	  useEffect(() => {
 	    const isMobileBrowser = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && !isNativeRuntime();
@@ -673,10 +681,17 @@ export default function Home() {
 	    }
 	    const next: LocalProfile = { id, accountUid: account?.uid, username: account?.username, authToken: account?.idToken, accountType: account ? "official" : "guest", connectionCode: createConnectionCode(), displayName, bio: String(data.get("bio") || "").trim(), avatarUrl, encryptionPublicKey };
 	    const guestIdBeingMigrated = account && store.profile?.accountType === "guest" ? store.profile.id : null;
-	    const nextStore = store.profile?.accountType === "guest" && account ? migrateGuestToOfficial(store, next) : { ...store, profile: next };
+	    const rememberedAccount = account ? readAccountVault().find(record => record.id === account?.uid || record.accountUid === account?.uid || record.username === account?.username) : undefined;
+	    const rememberedStore = rememberedAccount ? accountStoreForSwitch(rememberedAccount) : store;
+	    const rememberedProfile = rememberedStore.profile;
+	    const restoredProfile = rememberedProfile && account
+	      ? { ...next, avatarUrl: next.avatarUrl || rememberedProfile.avatarUrl, bio: next.bio || rememberedProfile.bio, displayName: rememberedProfile.displayName || next.displayName, encryptionPublicKey: next.encryptionPublicKey || rememberedProfile.encryptionPublicKey }
+	      : next;
+	    const nextStore = rememberedStore.profile?.accountType === "guest" && account ? migrateGuestToOfficial(rememberedStore, restoredProfile) : { ...rememberedStore, profile: restoredProfile };
 	    profileRef.current = next;
 	    const saved = writeOrbitStore(nextStore);
 	    setStore(saved.store);
+	    setAccountVault(saveAccountSnapshot(saved.store));
 	    if (!saved.saved) toast.warning("A conta foi aberta, mas este dispositivo não conseguiu guardá-la no armazenamento local.");
 	    if (!account) {
 	      setActiveRoom(null);
@@ -713,8 +728,10 @@ export default function Home() {
 	  };
 
 	  const logoutCurrentAccount = () => {
-	    if (profile) removeAccountSnapshot(profile.id);
-	    setAccountVault(readAccountVault());
+	    if (profile) {
+	      const saved = writeOrbitStore(store);
+	      setAccountVault(saveAccountSnapshot(saved.store));
+	    }
 	    setStore(createEmptyOrbitStore());
 	    setShowAccounts(false);
 	    setActiveRoom(null);
