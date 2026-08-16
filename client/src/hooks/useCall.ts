@@ -49,6 +49,7 @@ export function useCall(socket: Socket | null) {
   const [sharingScreen, setSharingScreen] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<"user" | "environment">("user");
   const [switchingCamera, setSwitchingCamera] = useState(false);
+  const [minimized, setMinimized] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const nativeCallState = useCallback(() => ({
@@ -74,7 +75,11 @@ export function useCall(socket: Socket | null) {
 
   useEffect(() => {
     if (!room || !isNativeRuntime()) return;
-    const syncOverlay = () => { void setNativeCallOverlayVisible(document.visibilityState !== "visible"); };
+    const syncOverlay = () => {
+      const hidden = document.visibilityState !== "visible";
+      void setNativeCallOverlayVisible(hidden);
+      if (!hidden) setMinimized(false);
+    };
     syncOverlay();
     document.addEventListener("visibilitychange", syncOverlay);
     return () => {
@@ -168,7 +173,16 @@ export function useCall(socket: Socket | null) {
     setCameraOff(false);
     setSharingScreen(false);
     setCameraFacing("user");
+    setMinimized(false);
   }, [socket, stopIncomingAlert]);
+
+  const ensureOverlayPermission = useCallback(async () => {
+    if (!isNativeRuntime()) return true;
+    const result = await requestNativeCallOverlayPermission();
+    if (result.overlayAllowed) return true;
+    setError("Para entrar na chamada, permita ‘Aparecer sobre outros apps’ e volte para a Resenha Chat.");
+    return false;
+  }, []);
 
   const activeTracks = useCallback(() => {
     const stream = streamRef.current;
@@ -369,6 +383,7 @@ export function useCall(socket: Socket | null) {
     if (!socket) return setError("A conexão em tempo real ainda não está disponível.");
     try {
       setError(null);
+      if (!(await ensureOverlayPermission())) return;
       liveAudienceRef.current = liveAudienceIds;
       const cameraEnabled = await joinRoomWithMedia(nextRoom, withVideo);
       if (!notifyRecipients) {
@@ -387,7 +402,7 @@ export function useCall(socket: Socket | null) {
       endCall();
       setError(reason instanceof Error ? reason.message : "Permita o acesso ao microfone e à câmera para iniciar a chamada.");
     }
-  }, [endCall, joinRoomWithMedia, socket]);
+  }, [endCall, ensureOverlayPermission, joinRoomWithMedia, socket]);
 
   const acceptIncomingCall = useCallback(async () => {
     const invite = incomingCall;
@@ -396,12 +411,13 @@ export function useCall(socket: Socket | null) {
       stopIncomingAlert();
       setIncomingCall(null);
       setError(null);
+      if (!(await ensureOverlayPermission())) return;
       await joinRoomWithMedia(invite.room, invite.withVideo);
     } catch (reason) {
       endCall();
       setError(reason instanceof Error ? reason.message : "Permita o acesso ao microfone e à câmera para atender.");
     }
-  }, [endCall, incomingCall, joinRoomWithMedia, stopIncomingAlert]);
+  }, [endCall, ensureOverlayPermission, incomingCall, joinRoomWithMedia, stopIncomingAlert]);
 
   const declineIncomingCall = useCallback(() => {
     if (incomingCall) socket?.emit("call:decline", { callerId: incomingCall.caller.id, room: incomingCall.room });
@@ -506,12 +522,13 @@ export function useCall(socket: Socket | null) {
       setError("O compartilhamento de tela está disponível apenas em computadores.");
       return;
     }
-    if (!navigator.mediaDevices?.getDisplayMedia) {
+    const nativeMobileCapture = isMobileDevice() && isNativeRuntime();
+    if (!nativeMobileCapture && !navigator.mediaDevices?.getDisplayMedia) {
       setError("Esta versão da APK não oferece captura de tela. Atualize o Android System WebView e tente novamente.");
       return;
     }
     try {
-      const nativeCapture = isMobileDevice() && isNativeRuntime() ? await startNativeScreenCapture() : null;
+      const nativeCapture = nativeMobileCapture ? await startNativeScreenCapture() : null;
       const screenStream = nativeCapture?.stream || await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { max: 20 } }, audio: true });
       const screenTrack = screenStream.getVideoTracks()[0];
       if (!screenTrack) return;
@@ -534,14 +551,11 @@ export function useCall(socket: Socket | null) {
     }
   }, [sendDescription, socket, stopSharing]);
 
-  const enableFloatingWindow = useCallback(async () => {
-    try {
-      const result = await requestNativeCallOverlayPermission();
-      if (!result.overlayAllowed) setError("Permita a opção ‘sobre outros apps’ para usar a janela flutuante da chamada.");
-    } catch {
-      setError("Não foi possível abrir a permissão da janela flutuante neste Android.");
-    }
+  const minimizeCall = useCallback(async () => {
+    if (!isNativeRuntime()) return;
+    setMinimized(true);
+    await setNativeCallOverlayVisible(true);
   }, []);
 
-  return { room, localStream, remotePeers, incomingCall, outgoingCall, muted, cameraOff, sharingScreen, cameraFacing, switchingCamera, error, startCall, acceptIncomingCall, declineIncomingCall, endCall, toggleMute, toggleCamera, switchCamera, shareScreen, stopSharing, enableFloatingWindow };
+  return { room, localStream, remotePeers, incomingCall, outgoingCall, muted, cameraOff, sharingScreen, cameraFacing, switchingCamera, minimized, error, startCall, acceptIncomingCall, declineIncomingCall, endCall, toggleMute, toggleCamera, switchCamera, shareScreen, stopSharing, minimizeCall };
 }

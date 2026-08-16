@@ -24,7 +24,7 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 
 public class CallForegroundService extends Service {
-  private static final String CHANNEL_ID = "resenha_active_call";
+  private static final String CHANNEL_ID = "resenha_active_call_v2";
   private static final int NOTIFICATION_ID = 4103;
   private static final String ACTION_BEGIN = "com.resenhachat.app.call.BEGIN";
   private static final String ACTION_UPDATE = "com.resenhachat.app.call.UPDATE";
@@ -88,7 +88,7 @@ public class CallForegroundService extends Service {
     if (ACTION_OVERLAY.equals(action)) {
       overlayVisible = intent.getBooleanExtra(EXTRA_VISIBLE, false);
       refreshOverlay();
-      return START_NOT_STICKY;
+      return START_STICKY;
     }
     title = intent.getStringExtra(EXTRA_TITLE) == null ? title : intent.getStringExtra(EXTRA_TITLE);
     participants = Math.max(1, intent.getIntExtra(EXTRA_PARTICIPANTS, participants));
@@ -97,12 +97,12 @@ public class CallForegroundService extends Service {
     sharingScreen = intent.getBooleanExtra(EXTRA_SHARING, sharingScreen);
     startCallForeground();
     refreshOverlay();
-    return START_NOT_STICKY;
+    return START_STICKY;
   }
 
   private void startCallForeground() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Chamada em andamento", NotificationManager.IMPORTANCE_LOW);
+      NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Chamada ativa", NotificationManager.IMPORTANCE_MIN);
       channel.setDescription("Mantém a chamada ativa quando a Resenha está em segundo plano.");
       ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(channel);
     }
@@ -117,8 +117,10 @@ public class CallForegroundService extends Service {
       .setContentTitle(title)
       .setContentText(detail)
       .setContentIntent(openPending)
-      .setCategory(Notification.CATEGORY_CALL)
+      .setCategory(Notification.CATEGORY_SERVICE)
       .setOngoing(true)
+      .setOnlyAlertOnce(true)
+      .setPriority(Notification.PRIORITY_MIN)
       .build();
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       int type = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
@@ -177,8 +179,7 @@ public class CallForegroundService extends Service {
     close.setOnClickListener(view -> { hideOverlay(); overlayVisible = false; });
     FrameLayout.LayoutParams closeLayout = new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.CENTER_VERTICAL | Gravity.END);
     card.addView(close, closeLayout);
-    card.setOnClickListener(view -> openApp());
-    card.setOnTouchListener(new View.OnTouchListener() {
+    contents.setOnTouchListener(new View.OnTouchListener() {
       private float initialTouchX;
       private float initialTouchY;
       private int initialX;
@@ -235,7 +236,7 @@ public class CallForegroundService extends Service {
 
   @Override
   public void onTaskRemoved(Intent rootIntent) {
-    // A notificação mantém a chamada acessível; o processo não é forçado a encerrar aqui.
+    // O serviço em primeiro plano mantém a chamada acessível quando a tarefa deixa a tela.
     super.onTaskRemoved(rootIntent);
   }
 

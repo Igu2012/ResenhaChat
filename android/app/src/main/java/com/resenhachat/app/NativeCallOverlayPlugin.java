@@ -1,6 +1,8 @@
 package com.resenhachat.app;
 
 import android.content.Intent;
+import android.content.Context;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
@@ -16,6 +18,13 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 @CapacitorPlugin(name = "NativeCallOverlay")
 public class NativeCallOverlayPlugin extends Plugin {
+  private void setCallVolumeMode(boolean active) {
+    AudioManager audio = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+    if (audio == null) return;
+    audio.setMode(active ? AudioManager.MODE_IN_COMMUNICATION : AudioManager.MODE_NORMAL);
+    if (getActivity() != null) getActivity().setVolumeControlStream(active ? AudioManager.STREAM_VOICE_CALL : AudioManager.USE_DEFAULT_STREAM_TYPE);
+  }
+
   private boolean overlayAllowed() {
     return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(getContext());
   }
@@ -26,6 +35,7 @@ public class NativeCallOverlayPlugin extends Plugin {
     String participantLabel = call.getString("participantLabel", "Aguardando alguém entrar");
     boolean cameraActive = call.getBoolean("cameraActive", false);
     boolean sharingScreen = call.getBoolean("sharingScreen", false);
+    setCallVolumeMode(true);
     if (begin) CallForegroundService.begin(getContext(), title, participants, participantLabel, cameraActive, sharingScreen);
     else CallForegroundService.update(getContext(), title, participants, participantLabel, cameraActive, sharingScreen);
     JSObject result = new JSObject();
@@ -42,6 +52,7 @@ public class NativeCallOverlayPlugin extends Plugin {
   @PluginMethod
   public void end(PluginCall call) {
     CallForegroundService.end(getContext());
+    setCallVolumeMode(false);
     call.resolve();
   }
 
