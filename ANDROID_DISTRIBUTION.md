@@ -2,22 +2,24 @@
 
 ## Estado da release assinada
 
-A partir da versão **1.0.6**, a APK de produção do Resenha Chat é assinada com um certificado de release privado. A configuração lê os dados em `android/keystore.properties`, arquivo que é ignorado pelo Git, e o projeto inclui somente o modelo `android/keystore.properties.example`.
+A versão **1.0.7** é uma release de compatibilidade. Ela usa o mesmo certificado encontrado na APK `v1.0.5` já instalada, permitindo que o Android atualize o aplicativo sem exigir desinstalação e sem apagar os dados locais. A configuração de assinatura lê os dados em `android/keystore.properties`, arquivo que é ignorado pelo Git, e o projeto inclui somente o modelo `android/keystore.properties.example`.
 
 > Nunca envie o arquivo `.jks`, `android/keystore.properties` ou qualquer senha para o GitHub. O Android exige a mesma identidade de assinatura para permitir atualizações diretas da mesma aplicação. [1]
 
 | Item | Valor |
 |---|---|
 | Identificador Android | `com.resenhachat.app` |
-| Primeira APK com o novo certificado | `v1.0.6` (`versionCode` 7) |
+| Release de compatibilidade | `v1.0.7` (`versionCode` 8) |
 | Nome de distribuição | `ResenhaChat.apk` |
 | Assinatura verificada | APK Signature Scheme v2 |
 
 ## Instalação de transição
 
-A APK publicada como `v1.0.5` foi assinada com um certificado diferente. Por esse motivo, **o Android não pode atualizá-la diretamente para a v1.0.6**. Para instalar a primeira versão assinada com o novo keystore, a pessoa deve fazer cópia do que precisar, desinstalar a versão anterior e instalar `ResenhaChat.apk` da release `v1.0.6`. Os dados locais do aplicativo podem ser removidos nessa desinstalação.
+A APK `v1.0.6` foi assinada com um certificado novo e, por isso, **não atualiza diretamente** a `v1.0.5`. A `v1.0.7` foi assinada com o certificado da `v1.0.5` e deve ser instalada **por cima** dela. Essa é a versão indicada para quem já tem o aplicativo instalado.
 
-Após essa transição única, as próximas versões devem ser assinadas com **este mesmo keystore**, com `versionCode` sempre maior, e poderão atualizar normalmente. O código de atualização compara a versão empacotada com a tag da última GitHub Release e só abre o download uma vez para cada release.
+O certificado legado é um certificado de depuração e não é apropriado como identidade de produção a longo prazo. Sem Google Play, não é possível alterar novamente o certificado e ainda preservar a atualização direta dos APKs já instalados. Para migrar a uma identidade de produção sem exigir desinstalação, o caminho recomendado é configurar uma distribuição pela Google Play com Play App Signing. [1] [2]
+
+O código de atualização compara a versão empacotada com a tag da última GitHub Release e abre o download somente uma vez para cada release.
 
 ## Como reduzir o alerta do Google Play Protect
 

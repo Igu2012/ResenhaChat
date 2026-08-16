@@ -5,3 +5,6 @@
 - [x] Configurar a assinatura de release com o keystore privado criado fora do repositório.
 - [x] Gerar e validar uma APK assinada com novo `versionCode` e `versionName`.
 - [x] Atualizar a documentação de distribuição, assinatura e limitações do Play Protect.
+- [x] Diagnosticar a falha “App não instalado” ao atualizar da APK já existente.
+- [x] Recuperar ou identificar a assinatura compatível com a APK instalada.
+- [ ] Publicar uma APK que permita a atualização sem perda dos dados locais, se a chave original estiver disponível.
