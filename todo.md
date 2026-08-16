@@ -7,4 +7,4 @@
 - [x] Atualizar a documentação de distribuição, assinatura e limitações do Play Protect.
 - [x] Diagnosticar a falha “App não instalado” ao atualizar da APK já existente.
 - [x] Recuperar ou identificar a assinatura compatível com a APK instalada.
-- [ ] Publicar uma APK que permita a atualização sem perda dos dados locais, se a chave original estiver disponível.
+- [x] Publicar uma APK que permita a atualização sem perda dos dados locais, se a chave original estiver disponível.
