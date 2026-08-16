@@ -1,0 +1,106 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { accountStoreForSwitch, applyOfficialSession, createEmptyOrbitStore, directRoomId, migrateGuestToOfficial, readAccountVault, saveAccountSnapshot, writeOrbitStore, type OrbitStore } from "./localOrbit";
+
+const STORAGE_KEY = "orbit-chat.local-store.v2";
+
+describe("writeOrbitStore", () => {
+  beforeEach(() => {
+    const values = new Map<string, string>();
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          if (value.includes("data:image/png;base64,conteudo-pesado")) throw new DOMException("quota", "QuotaExceededError");
+          values.set(key, value);
+        },
+        removeItem: (key: string) => { values.delete(key); },
+        clear: () => { values.clear(); },
+        key: (index: number) => Array.from(values.keys())[index] ?? null,
+        get length() { return values.size; },
+      },
+    });
+  });
+
+  it("mantém a mensagem e remove apenas a cópia pesada do anexo quando a cota é excedida", () => {
+    const store: OrbitStore = {
+      profile: null,
+      contacts: [],
+      groups: [],
+      requests: [],
+      messages: {
+        "dm:a:b": [{
+          id: "message-1",
+          roomId: "dm:a:b",
+          author: { id: "a", connectionCode: "ABC123", displayName: "Ana", bio: "", avatarUrl: null },
+          body: "Não perca este texto",
+          attachment: { name: "foto.png", mimeType: "image/png", size: 12, dataUrl: "data:image/png;base64,conteudo-pesado" },
+          createdAt: "2026-08-16T00:00:00.000Z",
+        }],
+      },
+    };
+
+    const result = writeOrbitStore(store);
+    expect(result.saved).toBe(true);
+    expect(result.droppedAttachments).toBe(1);
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as OrbitStore;
+    expect(saved.messages["dm:a:b"][0].body).toBe("Não perca este texto");
+    expect(saved.messages["dm:a:b"][0].attachment).toBeNull();
+    expect(saved.messages["dm:a:b"][0].attachmentUnavailable).toBe(true);
+  });
+
+  it("salva múltiplas contas sem persistir tokens de autenticação", () => {
+    const guest: OrbitStore = { profile: { id: "guest", connectionCode: "ABC123", displayName: "Guest", bio: "", avatarUrl: null, accountType: "guest" }, contacts: [], groups: [], requests: [], messages: {} };
+    const official: OrbitStore = { profile: { id: "official", accountUid: "official", username: "ana", connectionCode: "ZXCV12", displayName: "Ana", bio: "", avatarUrl: null, accountType: "official", authToken: "token-que-nao-pode-ser-salvo" }, contacts: [], groups: [], requests: [], messages: {} };
+    saveAccountSnapshot(guest);
+    saveAccountSnapshot(official);
+    const rawVault = localStorage.getItem("resenha-chat.account-vault.v1") || "";
+    expect(rawVault).not.toContain("token-que-nao-pode-ser-salvo");
+    expect(readAccountVault()).toHaveLength(2);
+    expect(readAccountVault().map(account => account.id)).toEqual(["guest", "official"]);
+  });
+
+  it("preserva conversas e grupos ao transformar um perfil Guest em conta oficial", () => {
+    const guest = { id: "guest", connectionCode: "ABC123", displayName: "Convidado", bio: "", avatarUrl: null, accountType: "guest" as const };
+    const official = { id: "official", connectionCode: "ZXCV12", displayName: "Ana", bio: "", avatarUrl: null, accountType: "official" as const, username: "ana" };
+    const store: OrbitStore = { profile: guest, contacts: [], requests: [], groups: [{ id: "group", name: "Grupo", imageUrl: null, ownerId: "guest", members: [guest], channels: [] }], messages: { "dm:guest:friend": [{ id: "message", roomId: "dm:guest:friend", author: guest, body: "histórico", attachment: null, createdAt: "2026-08-16T00:00:00.000Z" }] } };
+
+    const migrated = migrateGuestToOfficial(store, official);
+    expect(migrated.profile).toEqual(official);
+    const officialRoom = directRoomId("official", "friend");
+    expect(migrated.messages[officialRoom][0].author.id).toBe("official");
+    expect(migrated.messages[officialRoom][0].roomId).toBe(officialRoom);
+    expect(migrated.messages["dm:guest:friend"]).toBeUndefined();
+    expect(migrated.groups[0].ownerId).toBe("official");
+    expect(migrated.groups[0].members[0].id).toBe("official");
+  });
+
+  it("separa históricos e reidrata sessão oficial sem persistir o token", () => {
+    const guest: OrbitStore = { profile: { id: "guest", connectionCode: "ABC123", displayName: "Guest", bio: "", avatarUrl: null, accountType: "guest" }, contacts: [], groups: [], requests: [], messages: { "dm:guest:friend": [] } };
+    const official: OrbitStore = { profile: { id: "official", accountUid: "uid", username: "ana", connectionCode: "ZXCV12", displayName: "Ana", bio: "", avatarUrl: null, accountType: "official" }, contacts: [], groups: [], requests: [], messages: { "dm:official:friend": [] } };
+    saveAccountSnapshot(guest);
+    saveAccountSnapshot(official);
+    const selected = accountStoreForSwitch(readAccountVault().find(account => account.id === "official")!);
+    expect(selected?.messages["dm:official:friend"]).toEqual([]);
+    expect(selected?.messages["dm:guest:friend"]).toBeUndefined();
+    const session = applyOfficialSession(selected!, { uid: "official", username: "ana", idToken: "novo-token" });
+    expect(session.profile?.authToken).toBe("novo-token");
+    saveAccountSnapshot(session);
+    expect(localStorage.getItem("resenha-chat.account-vault.v1")).not.toContain("novo-token");
+  });
+
+  it("reabre o histórico oficial após encerrar a sessão e entrar novamente com senha", () => {
+    const guest: OrbitStore = { profile: { id: "guest", connectionCode: "ABC123", displayName: "Guest", bio: "", avatarUrl: null, accountType: "guest" }, contacts: [], groups: [], requests: [], messages: { "dm:guest:friend": [] } };
+    const official: OrbitStore = { profile: { id: "official", accountUid: "official", username: "ana", connectionCode: "ZXCV12", displayName: "Ana", bio: "", avatarUrl: null, accountType: "official" }, contacts: [], groups: [], requests: [], messages: { "dm:official:friend": [{ id: "history", roomId: "dm:official:friend", author: guest.profile!, body: "histórico oficial", attachment: null, createdAt: "2026-08-16T00:00:00.000Z" }] } };
+    saveAccountSnapshot(guest);
+    saveAccountSnapshot(official);
+    const loggedOut = createEmptyOrbitStore();
+    expect(loggedOut.profile).toBeNull();
+    const record = readAccountVault().find(account => account.id === "official")!;
+    const reentered = applyOfficialSession(accountStoreForSwitch(record), { uid: "official", username: "ana", idToken: "token-recebido-apos-senha" });
+    expect(reentered.messages["dm:official:friend"][0].body).toBe("histórico oficial");
+    expect(reentered.messages["dm:guest:friend"]).toBeUndefined();
+    saveAccountSnapshot(reentered);
+    expect(localStorage.getItem("resenha-chat.account-vault.v1")).not.toContain("token-recebido-apos-senha");
+  });
+});

@@ -1,0 +1,11 @@
+# Resenha Chat — Cliente
+
+Este repositório contém exclusivamente o **cliente estático** do Resenha Chat, destinado ao deploy no Vercel e ao build da APK Android. A API, o Socket.io, Firebase, Klipy e demais variáveis privadas permanecem no repositório [`Igu2012/redesocial`](https://github.com/Igu2012/redesocial), hospedado no Render em `https://resenhudochat.onrender.com`.
+
+## Vercel
+
+Importe este repositório no Vercel. A configuração `vercel.json` já executa `pnpm build`, publica `dist/public` e redireciona rotas da SPA para `index.html`. O cliente usa `https://resenhudochat.onrender.com` como origem padrão da API e do Socket.io. Caso necessário, defina `VITE_RESENHA_SERVER_URL` com essa mesma URL, sem barra ao final.
+
+## Android e releases
+
+Execute `pnpm install`, depois `pnpm build:android`; abra a pasta `android/` no Android Studio ou execute `./gradlew assembleDebug` dentro dela. O arquivo resultante se chama `ResenhaChat.apk`. Publique-o como asset de uma GitHub Release neste repositório, pois a APK consulta este repositório para encontrar atualizações.
