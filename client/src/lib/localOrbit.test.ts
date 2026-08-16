@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { accountStoreForSwitch, applyOfficialSession, createEmptyOrbitStore, directRoomId, migrateGuestToOfficial, readAccountVault, readOrbitStore, saveAccountSnapshot, writeOrbitStore, type OrbitStore } from "./localOrbit";
+import { accountStoreForSwitch, applyOfficialSession, createEmptyOrbitStore, directRoomId, migrateGuestToOfficial, readAccountVault, readOfficialRefreshToken, readOrbitStore, saveAccountSnapshot, writeOrbitStore, type OrbitStore } from "./localOrbit";
 
 const STORAGE_KEY = "orbit-chat.local-store.v2";
 
@@ -83,10 +83,11 @@ describe("writeOrbitStore", () => {
     const selected = accountStoreForSwitch(readAccountVault().find(account => account.id === "official")!);
     expect(selected?.messages["dm:official:friend"]).toEqual([]);
     expect(selected?.messages["dm:guest:friend"]).toBeUndefined();
-    const session = applyOfficialSession(selected!, { uid: "official", username: "ana", idToken: "novo-token" });
+    const session = applyOfficialSession(selected!, { uid: "official", username: "ana", idToken: "novo-token", refreshToken: "refresh-privado" });
     expect(session.profile?.authToken).toBe("novo-token");
     saveAccountSnapshot(session);
     expect(localStorage.getItem("resenha-chat.account-vault.v1")).not.toContain("novo-token");
+    expect(readOfficialRefreshToken("official")).toBe("refresh-privado");
   });
 
   it("reabre o histórico oficial após encerrar a sessão e entrar novamente com senha", () => {

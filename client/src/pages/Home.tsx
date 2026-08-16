@@ -14,9 +14,11 @@ import {
 	  deleteMessagesByAuthor,
 	  directRoomId,
 	  migrateDirectRoomId,
+	  readOfficialRefreshToken,
 	  readAccountVault,
 	  readOrbitStore,
 	  removeAccountSnapshot,
+	  saveOfficialRefreshToken,
 	  saveAccountSnapshot,
   type LocalAttachment,
   type LocalGroup,
@@ -33,7 +35,7 @@ import {
 	} from "@/lib/localOrbit";
 	import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, isEncryptedMessage } from "@/lib/e2ee";
 	import { checkForUpdate, getLatestReleaseDownload, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, requestNativeCallOverlayPermission, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload } from "@/lib/nativeRuntime";
-	import { loginOfficialAccount, registerOfficialAccount } from "@/lib/accountSession";
+	import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
 
 	import { acceptsAttachmentSize, MAX_ATTACHMENT_BYTES } from "../../../shared/attachmentLimits";
 	import { isValidPassword, isValidUsername, PASSWORD_HTML_PATTERN, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordRuleMessage, passwordsMatch, USERNAME_HTML_PATTERN, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, usernameRuleMessage } from "../../../shared/credentials";
@@ -260,7 +262,8 @@ export default function Home() {
   const contactIdsRef = useRef<string[]>(store.contacts.map(contact => contact.id));
   const syncContactPresenceRef = useRef<(() => void) | null>(null);
   const syncVoiceWatchRef = useRef<(() => void) | null>(null);
-  const syncCallWatchRef = useRef<(() => void) | null>(null);
+	  const syncCallWatchRef = useRef<(() => void) | null>(null);
+	  const refreshingOfficialSessionRef = useRef<string | null>(null);
   const call = useCall(socket);
   const profile = store.profile;
   const selectedGroup = useMemo(() => store.groups.find(group => group.id === selectedGroupId) || null, [selectedGroupId, store.groups]);
@@ -340,7 +343,7 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
-		  useEffect(() => {
+	  useEffect(() => {
 	    if (!profile || profile.encryptionPublicKey) return;
 	    let cancelled = false;
 	    void ensureEncryptionPublicKey(profile.id).then(encryptionPublicKey => {
@@ -353,13 +356,40 @@ export default function Home() {
 	  }, [profile?.encryptionPublicKey, profile?.id]);
 
 	  useEffect(() => {
+	    if (!profile || profile.accountType !== "official") return;
+	    const refreshToken = readOfficialRefreshToken(profile.id);
+	    if (!refreshToken) return;
+	    let cancelled = false;
+	    const refreshSession = async () => {
+	      if (refreshingOfficialSessionRef.current === profile.id) return;
+	      refreshingOfficialSessionRef.current = profile.id;
+	      try {
+	        const account = await refreshOfficialAccount(runtimeApiUrl("/api/account/refresh"), refreshToken);
+	        if (!cancelled) setStore(current => current.profile?.id === profile.id ? applyOfficialSession(current, account) : current);
+	      } catch {
+	        // A conta local permanece aberta e tenta renovar novamente ao recuperar a internet.
+	      } finally {
+	        if (refreshingOfficialSessionRef.current === profile.id) refreshingOfficialSessionRef.current = null;
+	      }
+	    };
+	    if (!profile.authToken) void refreshSession();
+	    const timer = window.setInterval(() => { void refreshSession(); }, 50 * 60 * 1000);
+	    window.addEventListener("online", refreshSession);
+	    return () => {
+	      cancelled = true;
+	      window.clearInterval(timer);
+	      window.removeEventListener("online", refreshSession);
+	    };
+	  }, [profile?.accountType, profile?.authToken, profile?.id]);
+
+	  useEffect(() => {
     contactIdsRef.current = store.contacts.map(contact => contact.id);
     syncContactPresenceRef.current?.();
   }, [store.contacts]);
 
   useEffect(() => {
     if (!profile) return;
-    const instance = io(getRuntimeServerOrigin(), { path: "/api/socket.io", auth: { profile }, transports: ["websocket", "polling"], reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 700, reconnectionDelayMax: 5000, randomizationFactor: 0.35, timeout: 30_000 });
+	    const instance = io(getRuntimeServerOrigin(), { path: "/api/socket.io", auth: { profile }, transports: ["polling", "websocket"], upgrade: true, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 700, reconnectionDelayMax: 5000, randomizationFactor: 0.35, timeout: 30_000 });
     // O registro de push nativo não é iniciado automaticamente ao criar um perfil.
     // Isso evita encerrar a APK quando serviços Google ainda não estiverem disponíveis no aparelho.
     const syncContactPresence = () => {
@@ -405,9 +435,6 @@ export default function Home() {
     const noteInteraction = () => noteActivity();
     const retryAfterExhaustion = () => window.setTimeout(() => instance.connect(), 1200);
     setSocket(instance);
-    instance.on("connect_error", error => {
-      if (/sessão|perfil/i.test(error.message || "")) toast.error(error.message);
-    });
     instance.on("connect", () => { noteActivity(true); refreshPresence(); });
     instance.on("disconnect", reason => {
       if (reason === "io server disconnect") instance.connect();
@@ -653,7 +680,7 @@ export default function Home() {
 	    const username = String(data.get("username") || "").trim().toLowerCase();
 	    const password = String(data.get("password") || "");
 	    const passwordConfirmation = String(data.get("passwordConfirmation") || "");
-	    let account: { uid: string; username: string; displayName: string; idToken?: string } | null = null;
+	    let account: OfficialLogin | null = null;
 	    if (mode === "official") {
 	      if (!username || !password) { toast.error("Preencha nome de usuário e senha."); return; }
 	      if (data.get("intent") === "register" && !passwordsMatch(password, passwordConfirmation)) { toast.error("As duas senhas precisam ser iguais."); return; }
@@ -686,6 +713,7 @@ export default function Home() {
 	      toast.error("Não foi possível preparar a criptografia deste dispositivo.");
 	      return;
 	    }
+	    if (account?.refreshToken) saveOfficialRefreshToken(account.uid, account.refreshToken);
 	    const next: LocalProfile = { id, accountUid: account?.uid, username: account?.username, authToken: account?.idToken, accountType: account ? "official" : "guest", connectionCode: createConnectionCode(), displayName, bio: String(data.get("bio") || "").trim(), avatarUrl, encryptionPublicKey };
 	    const guestIdBeingMigrated = account && store.profile?.accountType === "guest" ? store.profile.id : null;
 	    const rememberedAccount = account ? readAccountVault().find(record => record.id === account?.uid || record.accountUid === account?.uid || record.username === account?.username) : undefined;
@@ -695,7 +723,7 @@ export default function Home() {
 	      ? { ...next, avatarUrl: next.avatarUrl || rememberedProfile.avatarUrl, bio: next.bio || rememberedProfile.bio, displayName: rememberedProfile.displayName || next.displayName, encryptionPublicKey: next.encryptionPublicKey || rememberedProfile.encryptionPublicKey }
 	      : next;
 	    const nextStore = rememberedStore.profile?.accountType === "guest" && account ? migrateGuestToOfficial(rememberedStore, restoredProfile) : { ...rememberedStore, profile: restoredProfile };
-	    profileRef.current = next;
+	    profileRef.current = restoredProfile;
 	    const saved = writeOrbitStore(nextStore);
 	    setStore(saved.store);
 	    setAccountVault(saveAccountSnapshot(saved.store));
@@ -707,8 +735,7 @@ export default function Home() {
 	    }
 	    if (guestIdBeingMigrated) setActiveRoom(current => current ? { ...current, id: migrateDirectRoomId(current.id, guestIdBeingMigrated, next.id) } : current);
 	    if (account) setUpgradingGuest(false);
-	    setAddingAccount(false);
-    toast.success(account ? "Conta oficial conectada." : "Perfil Guest criado.");
+    setAddingAccount(false);
   };
 
 	  const beginAddAccount = () => {
@@ -719,7 +746,7 @@ export default function Home() {
 	  const switchAccount = async (record: LocalAccountRecord, password?: string) => {
 	    if (record.accountType === "official") {
 	      if (!record.username || !password) { setSwitchingAccount(record); return; }
-	      let result: { uid: string; username: string; displayName: string; idToken?: string };
+	      let result: OfficialLogin;
 	      try { result = await loginOfficialAccount(runtimeApiUrl("/api/account/login"), record.username, password); }
 	      catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível entrar nesta conta."); return; }
 	      const nextStore = accountStoreForSwitch(record);
@@ -730,8 +757,7 @@ export default function Home() {
 	    setSwitchingAccount(null);
 	    setShowAccounts(false);
 	    setActiveRoom(null);
-	    setSelectedGroupId(null);
-	    toast.success(`Conta ${record.displayName} selecionada.`);
+    setSelectedGroupId(null);
 	  };
 
 	  const logoutCurrentAccount = () => {
@@ -746,8 +772,8 @@ export default function Home() {
 	    toast.success("Você saiu desta conta neste dispositivo.");
 	  };
 
-	  const addContact = (code: string) => {
-    if (!socket) { toast.error("Conectando ao Render. Tente novamente em alguns segundos."); return; }
+  const addContact = (code: string) => {
+    if (!socket?.connected) return;
     socket.emit("contact:add", { code }, (result: { ok: boolean; profile?: LocalProfile; pending?: boolean; message?: string }) => {
       if (!result.ok || !result.profile) { toast.error(result.message || "Não foi possível enviar a solicitação."); return; }
       toast.success(`Solicitação enviada para ${result.profile.displayName}.`);
@@ -756,7 +782,7 @@ export default function Home() {
   };
 
   const addContactByUsername = (username: string) => {
-    if (!socket) { toast.error("Conectando ao servidor. Tente novamente."); return; }
+    if (!socket?.connected) return;
     socket.emit("contact:add-username", { username }, (result: { ok: boolean; profile?: LocalProfile; message?: string }) => {
       if (!result.ok || !result.profile) { toast.error(result.message || "Nome de usuário não encontrado."); return; }
       toast.success(`Solicitação enviada para ${result.profile.displayName}.`);
@@ -850,7 +876,7 @@ export default function Home() {
 
 	  const sendMessage = async () => {
 	    if (!profile || !activeRoom || (!compose.trim() && !attachment)) return;
-	    if (!socket?.connected) { toast.error("Você precisa estar conectado para enviar mensagens."); return; }
+	    if (!socket?.connected) return;
 	    const message: LocalMessage = { id: createId(), roomId: activeRoom.id, author: profile, body: compose.trim() || null, attachment, createdAt: new Date().toISOString() };
 	    const recipients = activeRoom.kind === "dm" && activeRoom.partner
 	      ? [store.contacts.find(contact => contact.id === activeRoom.partner!.id) || activeRoom.partner]
@@ -871,7 +897,7 @@ export default function Home() {
 	  };
 
 	  const reactToMessage = (message: LocalMessage, emoji: string) => {
-	    if (!socket?.connected || !profile) return toast.error("Conecte-se para reagir à mensagem.");
+	    if (!socket?.connected || !profile) return;
 	    updateStore(current => ({ ...current, messages: updateMessage(current.messages, message.roomId, message.id, item => {
 	      const people = item.reactions?.[emoji] || [];
 	      const nextPeople = people.includes(profile.id) ? people.filter(id => id !== profile.id) : [...people, profile.id];
@@ -881,7 +907,7 @@ export default function Home() {
 	  };
 
 		  const deleteMessage = (message: LocalMessage) => {
-		    if (!socket?.connected) return toast.error("Conecte-se para excluir a mensagem.");
+		    if (!socket?.connected) return;
 		    socket.emit("message:delete", { messageId: message.id, roomId: message.roomId }, (result: { ok: boolean; message?: string }) => {
 		      if (!result.ok) toast.error(result.message || "Não foi possível excluir esta mensagem.");
 		    });

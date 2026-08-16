@@ -68,6 +68,7 @@ export type OrbitStore = {
 
 const STORAGE_KEY = "orbit-chat.local-store.v2";
 const ACCOUNT_VAULT_KEY = "resenha-chat.account-vault.v1";
+const REFRESH_TOKEN_KEY = "resenha-chat.official-refresh-tokens.v1";
 const EMPTY_STORE: OrbitStore = { profile: null, contacts: [], groups: [], messages: {}, requests: [], unreadRooms: {} };
 
 export type LocalAccountRecord = {
@@ -128,6 +129,28 @@ export function removeAccountSnapshot(accountId: string, storage: Storage = loca
   return next;
 }
 
+function readRefreshTokenVault(storage: Storage = localStorage) {
+  try {
+    const parsed = JSON.parse(storage.getItem(REFRESH_TOKEN_KEY) || "{}") as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, string> : {};
+  } catch {
+    return {};
+  }
+}
+
+export function readOfficialRefreshToken(accountId: string, storage: Storage = localStorage) {
+  return readRefreshTokenVault(storage)[accountId] || null;
+}
+
+export function saveOfficialRefreshToken(accountId: string, refreshToken: string, storage: Storage = localStorage) {
+  if (!accountId || !refreshToken) return;
+  try {
+    storage.setItem(REFRESH_TOKEN_KEY, JSON.stringify({ ...readRefreshTokenVault(storage), [accountId]: refreshToken }));
+  } catch {
+    // A sessão atual permanece funcional, mesmo quando o dispositivo não pode persistir a renovação.
+  }
+}
+
 export function accountStoreForSwitch(record: LocalAccountRecord): OrbitStore {
   return { ...record.store, profile: record.store.profile ? { ...record.store.profile } : null };
 }
@@ -136,11 +159,12 @@ export function createEmptyOrbitStore(): OrbitStore {
   return { profile: null, contacts: [], groups: [], messages: {}, requests: [], unreadRooms: {} };
 }
 
-export type OfficialSession = { uid: string; username: string; displayName?: string; idToken?: string };
+export type OfficialSession = { uid: string; username?: string; displayName?: string; idToken?: string; refreshToken?: string };
 
 export function applyOfficialSession(store: OrbitStore, session: OfficialSession): OrbitStore {
   if (!store.profile) return store;
-  return { ...store, profile: { ...store.profile, id: session.uid, accountUid: session.uid, username: session.username, displayName: session.displayName || store.profile.displayName, accountType: "official", authToken: session.idToken } };
+  if (session.refreshToken) saveOfficialRefreshToken(session.uid, session.refreshToken);
+  return { ...store, profile: { ...store.profile, id: session.uid, accountUid: session.uid, username: session.username || store.profile.username, displayName: session.displayName || store.profile.displayName, accountType: "official", authToken: session.idToken || store.profile.authToken } };
 }
 
 export type OrbitStoreWriteResult = {

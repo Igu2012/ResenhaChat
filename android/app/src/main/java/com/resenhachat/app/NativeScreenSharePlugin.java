@@ -13,6 +13,7 @@ import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.view.Surface;
@@ -39,6 +40,7 @@ public class NativeScreenSharePlugin extends Plugin {
   private long lastFrameAt;
   private int outputWidth;
   private int outputHeight;
+  private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
   @PluginMethod
   public void start(PluginCall call) {
@@ -58,10 +60,22 @@ public class NativeScreenSharePlugin extends Plugin {
       return;
     }
     try {
+      stopCapture();
+      final int resultCode = result.getResultCode();
+      final Intent resultData = result.getData();
+      ScreenProjectionService.start(getContext(), () -> beginProjection(call, resultCode, resultData));
+    } catch (Exception error) {
+      stopCapture();
+      call.reject(error.getMessage() == null ? "Não foi possível iniciar o serviço de compartilhamento de tela." : error.getMessage());
+    }
+  }
+
+  private void beginProjection(PluginCall call, int resultCode, Intent resultData) {
+    try {
       MediaProjectionManager manager = (MediaProjectionManager) getContext().getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-      projection = manager.getMediaProjection(result.getResultCode(), result.getData());
+      if (manager == null) throw new IllegalStateException("MediaProjection não está disponível neste Android.");
+      projection = manager.getMediaProjection(resultCode, resultData);
       if (projection == null) throw new IllegalStateException("Não foi possível iniciar a projeção de tela.");
-      ScreenProjectionService.start(getContext());
       DisplayMetrics metrics = getContext().getResources().getDisplayMetrics();
       float scale = Math.min(1f, 480f / Math.max(metrics.widthPixels, metrics.heightPixels));
       outputWidth = Math.max(2, ((int) (metrics.widthPixels * scale)) & ~1);
@@ -72,7 +86,7 @@ public class NativeScreenSharePlugin extends Plugin {
       imageReader.setOnImageAvailableListener(this::onImageAvailable, new Handler(captureThread.getLooper()));
       virtualDisplay = projection.createVirtualDisplay("ResenhaScreenShare", outputWidth, outputHeight, metrics.densityDpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, imageReader.getSurface(), null, null);
       projection.registerCallback(new MediaProjection.Callback() {
-        @Override public void onStop() { notifyListeners("stopped", new JSObject()); stopCapture(); }
+        @Override public void onStop() { notifyListeners("stopped", new JSObject()); releaseCapture(false); }
       }, new Handler(captureThread.getLooper()));
       JSObject response = new JSObject();
       response.put("width", outputWidth);
@@ -123,9 +137,15 @@ public class NativeScreenSharePlugin extends Plugin {
   protected void handleOnDestroy() { stopCapture(); }
 
   private void stopCapture() {
+    releaseCapture(true);
+  }
+
+  private void releaseCapture(boolean stopProjection) {
     if (virtualDisplay != null) { virtualDisplay.release(); virtualDisplay = null; }
     if (imageReader != null) { imageReader.close(); imageReader = null; }
-    if (projection != null) { projection.stop(); projection = null; }
+    MediaProjection activeProjection = projection;
+    projection = null;
+    if (stopProjection && activeProjection != null) activeProjection.stop();
     if (captureThread != null) { captureThread.quitSafely(); captureThread = null; }
     getContext().stopService(new Intent(getContext(), ScreenProjectionService.class));
   }

@@ -8,13 +8,20 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 
 public class ScreenProjectionService extends Service {
   private static final String CHANNEL_ID = "resenha_screen_share";
   private static final int NOTIFICATION_ID = 4102;
 
-  public static void start(Context context) {
+  private static Runnable onForegroundStarted;
+
+  public static void start(Context context, Runnable onStarted) {
+    synchronized (ScreenProjectionService.class) {
+      onForegroundStarted = onStarted;
+    }
     Intent intent = new Intent(context, ScreenProjectionService.class);
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent);
     else context.startService(intent);
@@ -38,6 +45,12 @@ public class ScreenProjectionService extends Service {
       .build();
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
     else startForeground(NOTIFICATION_ID, notification);
+    Runnable callback;
+    synchronized (ScreenProjectionService.class) {
+      callback = onForegroundStarted;
+      onForegroundStarted = null;
+    }
+    if (callback != null) new Handler(Looper.getMainLooper()).post(callback);
     return START_NOT_STICKY;
   }
 

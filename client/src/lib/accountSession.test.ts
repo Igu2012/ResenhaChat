@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { loginOfficialAccount, registerOfficialAccount } from "./accountSession";
+import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount } from "./accountSession";
 
 describe("reentrada oficial com senha", () => {
   it("envia username e senha ao endpoint de login antes de restaurar a sessão", async () => {
@@ -22,5 +22,11 @@ describe("reentrada oficial com senha", () => {
     const offline = async () => { throw new TypeError("Failed to fetch"); };
     await expect(loginOfficialAccount("https://resenhudochat.onrender.com/api/account/login", "ana", "senha123", offline)).rejects.toThrow("Não foi possível alcançar o servidor da Resenha");
     await expect(registerOfficialAccount("https://resenhudochat.onrender.com/api/account/register", "ana", "senha123", "Ana", offline)).rejects.toThrow("Não foi possível alcançar o servidor da Resenha");
+  });
+
+  it("renova silenciosamente uma sessão com o token de renovação", async () => {
+    const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ account: { uid: "official", idToken: "novo-token", refreshToken: "novo-refresh" } }) });
+    await expect(refreshOfficialAccount("/api/account/refresh", "refresh-antigo", request)).resolves.toMatchObject({ uid: "official", idToken: "novo-token" });
+    expect(request).toHaveBeenCalledWith("/api/account/refresh", expect.objectContaining({ method: "POST", body: JSON.stringify({ refreshToken: "refresh-antigo" }) }));
   });
 });
