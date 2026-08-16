@@ -3,9 +3,12 @@ import { Browser } from "@capacitor/browser";
 import { PushNotifications } from "@capacitor/push-notifications";
 import type { Socket } from "socket.io-client";
 
-export const APP_VERSION = "1.0.5";
+declare const __RESENHA_APP_VERSION__: string;
+
+export const APP_VERSION = __RESENHA_APP_VERSION__;
 const RELEASES_ENDPOINT = "https://api.github.com/repos/Igu2012/ResenhaChat/releases/latest";
 const RESENHA_API_ORIGIN = (import.meta.env.VITE_RESENHA_SERVER_URL || "https://resenhudochat.onrender.com").replace(/\/+$/, "");
+const LAST_OFFERED_UPDATE_KEY = "resenha-chat:last-offered-update";
 
 type NativeScreenSharePlugin = {
   start: () => Promise<{ width: number; height: number }>;
@@ -81,6 +84,8 @@ type GitHubRelease = {
   assets?: Array<{ name?: string; browser_download_url?: string }>;
 };
 
+export type ReleaseDownload = { version: string | null; url: string | null };
+
 function normalizeVersion(version: string) {
   return version.trim().replace(/^v/i, "").split("-")[0].split(".").map(part => Number.parseInt(part, 10) || 0);
 }
@@ -95,13 +100,18 @@ export function isNewerVersion(candidate: string, current = APP_VERSION) {
   return false;
 }
 
+export function toReleaseDownload(release: GitHubRelease): ReleaseDownload {
+  const apk = release.assets?.find(asset => asset.name?.toLowerCase() === "resenhachat.apk")
+    ?? release.assets?.find(asset => asset.name?.toLowerCase().endsWith(".apk"));
+  return { version: release.tag_name || null, url: apk?.browser_download_url || release.html_url || null };
+}
+
 export async function getLatestReleaseDownload() {
   try {
     const response = await fetch(RELEASES_ENDPOINT, { headers: { Accept: "application/vnd.github+json" } });
     if (!response.ok) return null;
     const release = await response.json() as GitHubRelease;
-    const apk = release.assets?.find(asset => asset.name?.toLowerCase().endsWith(".apk"))?.browser_download_url;
-    return { version: release.tag_name || null, url: apk || release.html_url || null };
+    return toReleaseDownload(release);
   } catch {
     return null;
   }
@@ -112,6 +122,22 @@ export async function checkForUpdate() {
   const release = await getLatestReleaseDownload();
   if (!release?.version || !isNewerVersion(release.version)) return null;
   return release;
+}
+
+export function shouldOpenUpdateDownload(version: string) {
+  try {
+    return localStorage.getItem(LAST_OFFERED_UPDATE_KEY) !== version;
+  } catch {
+    return true;
+  }
+}
+
+export function markUpdateDownloadOffered(version: string) {
+  try {
+    localStorage.setItem(LAST_OFFERED_UPDATE_KEY, version);
+  } catch {
+    // Sem armazenamento disponível, o fluxo segue normalmente.
+  }
 }
 
 export async function openUpdateDownload(url: string) {

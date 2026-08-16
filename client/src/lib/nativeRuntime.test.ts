@@ -1,9 +1,21 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { beginNativeCallSession, getLatestReleaseDownload, isNewerVersion, requestNativeMediaPermission, requestNativeNotificationPermission, setNativeCallOverlayVisible } from "./nativeRuntime";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { APP_VERSION, beginNativeCallSession, getLatestReleaseDownload, isNewerVersion, markUpdateDownloadOffered, requestNativeMediaPermission, requestNativeNotificationPermission, setNativeCallOverlayVisible, shouldOpenUpdateDownload, toReleaseDownload } from "./nativeRuntime";
 
 afterEach(() => vi.unstubAllGlobals());
+const storage = new Map<string, string>();
+beforeEach(() => {
+  storage.clear();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+  });
+});
 
 describe("isNewerVersion", () => {
+  it("usa a versão centralizada do pacote de release", () => {
+    expect(APP_VERSION).toBe("1.0.6");
+  });
+
   it("identifica uma release semântica mais recente", () => {
     expect(isNewerVersion("v1.0.1", "1.0.0")).toBe(true);
     expect(isNewerVersion("1.2.0", "1.1.99")).toBe(true);
@@ -22,6 +34,24 @@ describe("isNewerVersion", () => {
     }));
 
     await expect(getLatestReleaseDownload()).resolves.toEqual({ version: "v1.2.0", url: "https://downloads.example/ResenhaChat.apk" });
+  });
+
+  it("prioriza a APK estável mesmo quando a release possui outros arquivos APK", () => {
+    expect(toReleaseDownload({
+      tag_name: "v1.2.0",
+      html_url: "https://github.com/Igu2012/ResenhaChat/releases/tag/v1.2.0",
+      assets: [
+        { name: "arquivo-de-teste.apk", browser_download_url: "https://downloads.example/test.apk" },
+        { name: "ResenhaChat.apk", browser_download_url: "https://downloads.example/ResenhaChat.apk" },
+      ],
+    })).toEqual({ version: "v1.2.0", url: "https://downloads.example/ResenhaChat.apk" });
+  });
+
+  it("abre o download automático somente uma vez por versão", () => {
+    expect(shouldOpenUpdateDownload("v1.2.0")).toBe(true);
+    markUpdateDownloadOffered("v1.2.0");
+    expect(shouldOpenUpdateDownload("v1.2.0")).toBe(false);
+    expect(shouldOpenUpdateDownload("v1.2.1")).toBe(true);
   });
 });
 

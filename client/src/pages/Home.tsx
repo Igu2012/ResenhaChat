@@ -32,7 +32,7 @@ import {
 	  writeOrbitStore,
 	} from "@/lib/localOrbit";
 	import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, isEncryptedMessage } from "@/lib/e2ee";
-import { checkForUpdate, getLatestReleaseDownload, getRuntimeServerOrigin, isNativeRuntime, openUpdateDownload, requestNativeCallOverlayPermission, requestNativeNotificationPermission, runtimeApiUrl } from "@/lib/nativeRuntime";
+	import { checkForUpdate, getLatestReleaseDownload, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, requestNativeCallOverlayPermission, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload } from "@/lib/nativeRuntime";
 	import { loginOfficialAccount, registerOfficialAccount } from "@/lib/accountSession";
 
 	import { acceptsAttachmentSize, MAX_ATTACHMENT_BYTES } from "../../../shared/attachmentLimits";
@@ -332,6 +332,8 @@ export default function Home() {
     let cancelled = false;
     void checkForUpdate().then(update => {
       if (cancelled || !update?.url) return;
+      if (!shouldOpenUpdateDownload(update.version || "latest")) return;
+      markUpdateDownloadOffered(update.version || "latest");
       toast.info(`Atualização ${update.version} disponível. Abrindo o download…`);
       void openUpdateDownload(update.url);
     });
