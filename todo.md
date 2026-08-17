@@ -21,5 +21,5 @@
 - [ ] Corrigir o cancelamento persistente do compartilhamento de tela Android.
 - [ ] Manter a chamada ativa no serviço Android ao fechar ou remover a APK da tela de recentes, até o usuário desligar.
 - [x] Encerrar a sala de chamada após três minutos com apenas um participante, para reduzir uso de recursos.
-- [ ] Validar e publicar uma APK com as melhorias de mídia e interações de mensagens.
+- [x] Validar e publicar uma APK com as melhorias de mídia e interações de mensagens.
 - [x] Exibir as iniciais do servidor como avatar reserva quando não houver imagem definida.
