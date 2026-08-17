@@ -1,4 +1,4 @@
-import type { LocalAttachment } from "./localOrbit";
+import type { LocalAttachment, LocalReplyReference } from "./localOrbit";
 
 const KEY_STORAGE_PREFIX = "resenha-chat.e2ee.keypair.";
 const encoder = new TextEncoder();
@@ -18,6 +18,7 @@ export type EncryptedMessage = {
 export type ClearMessageContent = {
   body: string | null;
   attachment: LocalAttachment | null;
+  replyTo?: LocalReplyReference;
 };
 
 type StoredKeyPair = { privateKey: JsonWebKey; publicKey: JsonWebKey };
@@ -94,7 +95,10 @@ export async function decryptMessageForRecipient(profileId: string, senderPublic
   const cipher = await sharedCipher(profileId, senderPublicKey, ["decrypt"]);
   const data = await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64ToBytes(envelope.iv) }, cipher, base64ToBytes(envelope.ciphertext));
   const content = JSON.parse(decoder.decode(data)) as ClearMessageContent;
-  return { body: typeof content.body === "string" ? content.body : null, attachment: content.attachment || null };
+  const replyTo = content.replyTo && typeof content.replyTo.id === "string" && typeof content.replyTo.authorName === "string" && typeof content.replyTo.preview === "string"
+    ? { id: content.replyTo.id, authorName: content.replyTo.authorName, preview: content.replyTo.preview.slice(0, 180) }
+    : undefined;
+  return { body: typeof content.body === "string" ? content.body : null, attachment: content.attachment || null, replyTo };
 }
 
 export function isEncryptedMessage(value: unknown): value is EncryptedMessage {

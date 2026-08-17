@@ -84,10 +84,11 @@ public class NativeScreenSharePlugin extends Plugin {
       captureThread.start();
       imageReader = ImageReader.newInstance(outputWidth, outputHeight, PixelFormat.RGBA_8888, 2);
       imageReader.setOnImageAvailableListener(this::onImageAvailable, new Handler(captureThread.getLooper()));
-      virtualDisplay = projection.createVirtualDisplay("ResenhaScreenShare", outputWidth, outputHeight, metrics.densityDpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, imageReader.getSurface(), null, null);
       projection.registerCallback(new MediaProjection.Callback() {
         @Override public void onStop() { notifyListeners("stopped", new JSObject()); releaseCapture(false); }
       }, new Handler(captureThread.getLooper()));
+      // Android exige registrar o callback antes de criar o VirtualDisplay.
+      virtualDisplay = projection.createVirtualDisplay("ResenhaScreenShare", outputWidth, outputHeight, metrics.densityDpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, imageReader.getSurface(), null, null);
       JSObject response = new JSObject();
       response.put("width", outputWidth);
       response.put("height", outputHeight);

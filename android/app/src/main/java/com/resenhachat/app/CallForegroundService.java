@@ -235,7 +235,10 @@ public class CallForegroundService extends Service {
 
   @Override
   public void onTaskRemoved(Intent rootIntent) {
-    // O serviço em primeiro plano mantém a chamada acessível quando a tarefa deixa a tela.
+    // A tarefa do WebView pode sair da tela de recentes sem que a chamada seja desligada.
+    // Mantemos a notificação e deixamos o atalho flutuante disponível para abrir a chamada.
+    overlayVisible = true;
+    refreshOverlay();
     super.onTaskRemoved(rootIntent);
   }
 

@@ -359,6 +359,11 @@ export function useCall(socket: Socket | null) {
       setError(`${profile.displayName} recusou a chamada.`);
       endCall();
     };
+    const onCallEnded = ({ room: endedRoom, reason }: { room?: string; reason?: string }) => {
+      if (!roomRef.current || (endedRoom && endedRoom !== roomRef.current)) return;
+      endCall();
+      if (reason === "alone_timeout") setError("A chamada foi encerrada após 3 minutos sem outra pessoa na sala.");
+    };
     socket.on("call:signal", onSignal);
     socket.on("call:peer-joined", onPeerJoined);
     socket.on("call:peer-left", onPeerLeft);
@@ -366,6 +371,7 @@ export function useCall(socket: Socket | null) {
     socket.on("call:media-states", onMediaStates);
     socket.on("call:incoming", onIncoming);
     socket.on("call:declined", onDeclined);
+    socket.on("call:ended", onCallEnded);
     return () => {
       socket.off("call:signal", onSignal);
       socket.off("call:peer-joined", onPeerJoined);
@@ -374,10 +380,15 @@ export function useCall(socket: Socket | null) {
       socket.off("call:media-states", onMediaStates);
       socket.off("call:incoming", onIncoming);
       socket.off("call:declined", onDeclined);
+      socket.off("call:ended", onCallEnded);
     };
   }, [createPeer, dropPeer, endCall, socket, startIncomingAlert]);
 
-  useEffect(() => () => endCall(), [endCall]);
+  useEffect(() => () => {
+    // No navegador, sair da página encerra mídia. Na APK, o serviço em primeiro plano
+    // continua ativo; o usuário encerra pela interface da chamada.
+    if (!isNativeRuntime()) endCall();
+  }, [endCall]);
 
   const startCall = useCallback(async (nextRoom: string, recipientIds: string[], withVideo: boolean, notifyRecipients = true, liveAudienceIds: string[] = []) => {
     if (!socket) return setError("A conexão em tempo real ainda não está disponível.");
@@ -546,8 +557,9 @@ export function useCall(socket: Socket | null) {
       setSharingScreen(true);
       if (roomRef.current) socket?.emit("call:media-state", { room: roomRef.current, sharingScreen: true, recipientIds: liveAudienceRef.current });
       screenTrack.onended = () => { void stopSharing(); };
-    } catch {
-      setError(isNativeRuntime() ? "O compartilhamento de tela foi cancelado ou bloqueado pelo Android." : "O compartilhamento de tela foi cancelado ou bloqueado pelo navegador.");
+    } catch (reason) {
+      const detail = reason instanceof Error && reason.message ? ` ${reason.message}` : "";
+      setError(isNativeRuntime() ? `O compartilhamento de tela foi cancelado ou bloqueado pelo Android.${detail}` : `O compartilhamento de tela foi cancelado ou bloqueado pelo navegador.${detail}`);
     }
   }, [sendDescription, socket, stopSharing]);
 

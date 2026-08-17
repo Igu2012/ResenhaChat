@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { accountStoreForSwitch, applyOfficialSession, createEmptyOrbitStore, directRoomId, migrateGuestToOfficial, readAccountVault, readOfficialRefreshToken, readOrbitStore, saveAccountSnapshot, writeOrbitStore, type OrbitStore } from "./localOrbit";
+import { accountStoreForSwitch, applyOfficialSession, createEmptyOrbitStore, deleteMessagesByAuthor, directRoomId, migrateGuestToOfficial, readAccountVault, readOfficialRefreshToken, readOrbitStore, saveAccountSnapshot, writeOrbitStore, type OrbitStore } from "./localOrbit";
 
 const STORAGE_KEY = "orbit-chat.local-store.v2";
 
@@ -47,6 +47,12 @@ describe("writeOrbitStore", () => {
     expect(saved.messages["dm:a:b"][0].body).toBe("Não perca este texto");
     expect(saved.messages["dm:a:b"][0].attachment).toBeNull();
     expect(saved.messages["dm:a:b"][0].attachmentUnavailable).toBe(true);
+  });
+
+  it("remove reações junto com o conteúdo quando uma mensagem é excluída", () => {
+    const author = { id: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "", avatarUrl: null };
+    const deleted = deleteMessagesByAuthor({ "dm:ana:bia": [{ id: "m1", roomId: "dm:ana:bia", author, body: "Oi", attachment: null, createdAt: "2026-08-16T00:00:00.000Z", reactions: { "👍": ["ana", "bia"] } }] }, "dm:ana:bia", "ana", "ana");
+    expect(deleted["dm:ana:bia"][0]).toMatchObject({ body: null, attachment: null, reactions: {} });
   });
 
   it("salva múltiplas contas sem persistir tokens de autenticação", () => {

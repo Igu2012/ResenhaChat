@@ -21,6 +21,12 @@ export type LocalAttachment = {
   unavailableOffline?: boolean;
 };
 
+export type LocalReplyReference = {
+  id: string;
+  authorName: string;
+  preview: string;
+};
+
 export type LocalMessage = {
   id: string;
   roomId: string;
@@ -31,6 +37,7 @@ export type LocalMessage = {
   createdAt: string;
   encrypted?: EncryptedMessage;
   reactions?: Record<string, string[]>;
+  replyTo?: LocalReplyReference;
   deletedAt?: string;
   deletedBy?: string;
   groupInvite?: LocalRequest;
@@ -296,7 +303,7 @@ export function updateMessage(messages: Record<string, LocalMessage[]>, roomId: 
 
 export function deleteMessagesByAuthor(messages: Record<string, LocalMessage[]>, roomId: string, authorId: string, deletedBy: string, deletedAt = new Date().toISOString()) {
   const current = messages[roomId] || [];
-  return { ...messages, [roomId]: current.map(message => message.author.id === authorId ? { ...message, body: null, attachment: null, encrypted: undefined, deletedAt, deletedBy } : message) };
+  return { ...messages, [roomId]: current.map(message => message.author.id === authorId ? { ...message, body: null, attachment: null, encrypted: undefined, reactions: {}, deletedAt, deletedBy } : message) };
 }
 
 export function migrateDirectRoomId(roomId: string, guestId: string, officialId: string) {

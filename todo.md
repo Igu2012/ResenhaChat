@@ -13,3 +13,11 @@
 - [x] Corrigir o cancelamento do compartilhamento de tela nativo em chamadas Android.
 - [x] Validar e publicar uma APK focada em conectividade, persistência e compartilhamento de tela.
 - [x] Remover avisos técnicos de WebSocket/conexão e avisos de entrada de conta da interface e das notificações do sistema.
+- [ ] Diagnosticar e corrigir a falha de rede que impede o login oficial na APK Android.
+- [ ] Validar a requisição de login com a origem `https://localhost` usada pelo WebView Android e ajustar a APK se necessário.
+- [ ] Diagnosticar e corrigir a busca popular e por termo de GIFs e figurinhas da Klipy.
+- [ ] Criar um seletor de reações ampliado, inspirado no fluxo do Discord, e bloquear toda interação em mensagens excluídas.
+- [ ] Adicionar resposta a uma mensagem ao deslizar para a direita no celular.
+- [ ] Corrigir o cancelamento persistente do compartilhamento de tela Android.
+- [ ] Manter a chamada ativa no serviço Android ao fechar ou remover a APK da tela de recentes, até o usuário desligar.
+- [ ] Validar e publicar uma APK com as melhorias de mídia e interações de mensagens.
