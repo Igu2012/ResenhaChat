@@ -11,5 +11,5 @@
 - [x] Diagnosticar e corrigir a conexão Socket.io que impede o envio de mensagens no Android.
 - [x] Corrigir a restauração de sessão e dos dados persistidos após reabrir o aplicativo.
 - [x] Corrigir o cancelamento do compartilhamento de tela nativo em chamadas Android.
-- [ ] Validar e publicar uma APK focada em conectividade, persistência e compartilhamento de tela.
+- [x] Validar e publicar uma APK focada em conectividade, persistência e compartilhamento de tela.
 - [x] Remover avisos técnicos de WebSocket/conexão e avisos de entrada de conta da interface e das notificações do sistema.
