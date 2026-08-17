@@ -309,10 +309,10 @@ export default function Home() {
 	      toast.error("O armazenamento deste navegador está cheio. As novas alterações continuam abertas nesta tela, mas não puderam ser guardadas.");
 	      return;
 	    }
-	    if (!result.droppedAttachments && !result.clearedProfileAvatar) return;
-	    setStore(result.store);
-	    const parts = [result.droppedAttachments ? `${result.droppedAttachments} anexo(s) recente(s) não coube(ram) neste dispositivo` : null, result.clearedProfileAvatar ? "a foto do perfil foi removida da cópia local" : null].filter(Boolean);
-	    toast.warning(`Espaço insuficiente: ${parts.join(" e ")}. As mensagens foram mantidas.`);
+	    // Quando a cópia persistida precisa ser compactada, a mensagem enviada
+	    // continua disponível nesta sessão. Não atualize `store` a partir dessa
+	    // cópia: isso faria o efeito salvar de novo e poderia causar o ciclo
+	    // "Maximum update depth exceeded".
 	  }, [store]);
 
 	  useEffect(() => {
@@ -907,9 +907,9 @@ export default function Home() {
     setShowGroup(false);
   };
 
-  const inviteToGroup = (code: string) => {
+  const inviteToGroup = (code: string, selectedContact?: LocalProfile) => {
     if (!socket || !selectedGroup) return;
-    socket.emit("group:invite", { code, group: selectedGroup }, (result: { ok: boolean; profile?: LocalProfile; pending?: boolean; message?: string }) => {
+    socket.emit("group:invite", { code, contact: selectedContact, group: selectedGroup }, (result: { ok: boolean; profile?: LocalProfile; pending?: boolean; message?: string }) => {
       if (!result.ok || !result.profile) return toast.error(result.message || "Não foi possível enviar o convite.");
       toast.success(`Solicitação enviada para ${result.profile.displayName}.`);
       setShowInvite(false);
@@ -1406,14 +1406,14 @@ function GroupModal({ initial, onClose, onCreate }: { initial?: LocalGroup; onCl
   return <Modal onClose={onClose}><h2 className="text-lg font-bold">{initial ? "Editar servidor" : "Criar grupo"}</h2><p className="mt-1 text-sm text-slate-400">Escolha um nome e um ícone para identificar o servidor.</p><div className="mt-5 flex items-center gap-3"><div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl bg-violet-500 text-lg font-black text-white">{imageUrl ? <img src={imageUrl} alt="Ícone do servidor" className="h-full w-full object-cover" /> : initials(name || "S")}</div><label className="flex-1 cursor-pointer rounded-xl border border-dashed border-white/[.15] p-3 text-center text-xs text-slate-400 hover:border-violet-400 hover:text-white"><ImagePlus className="mx-auto mb-1" size={18} />Escolher ícone<input type="file" accept="image/*" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 2 * 1024 * 1024) { toast.error("O ícone deve ter no máximo 2 MB."); return; } const reader = new FileReader(); reader.onload = () => setImageUrl(String(reader.result)); reader.readAsDataURL(file); }} /></label></div><form onSubmit={event => { event.preventDefault(); onCreate(name, imageUrl); }}><Input name="name" required minLength={2} value={name} onChange={event => setName(event.target.value)} className="mt-4 h-12 border-white/[.09] bg-[#11131d] text-white" placeholder="Nome do servidor" /><Button className="mt-4 h-11 w-full rounded-xl bg-violet-500 hover:bg-violet-400"><FolderPlus size={17} />{initial ? "Salvar servidor" : "Criar servidor"}</Button></form></Modal>;
 }
 
-function InviteModal({ contacts, memberIds, onClose, onInvite }: { contacts: LocalProfile[]; memberIds: string[]; onClose: () => void; onInvite: (code: string) => void }) {
+function InviteModal({ contacts, memberIds, onClose, onInvite }: { contacts: LocalProfile[]; memberIds: string[]; onClose: () => void; onInvite: (code: string, selectedContact?: LocalProfile) => void }) {
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const availableContacts = filterInvitableContacts(contacts, memberIds);
   const selectedContact = availableContacts.find(contact => contact.id === selectedContactId) || null;
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const code = selectedContact?.connectionCode || String(new FormData(event.currentTarget).get("code") || "").trim();
-    if (code) onInvite(code);
+    if (code) onInvite(code, selectedContact || undefined);
   };
   return <Modal onClose={onClose}><div className="flex items-start justify-between"><div><h2 className="text-lg font-bold">Convidar para o grupo</h2><p className="mt-1 text-sm text-slate-400">Selecione um contato já adicionado ou use um código.</p></div><IconButton label="Fechar" onClick={onClose}><X size={18} /></IconButton></div><form onSubmit={submit}><p className="mt-5 text-[10px] font-bold uppercase tracking-[.13em] text-slate-500">Seus contatos</p>{availableContacts.length ? <div className="mt-2 max-h-52 space-y-1 overflow-y-auto rounded-xl border border-white/[.08] bg-[#11131d] p-1.5">{availableContacts.map(contact => <button type="button" key={contact.id} onClick={() => setSelectedContactId(current => current === contact.id ? null : contact.id)} className={`flex w-full items-center gap-3 rounded-lg p-2 text-left transition ${selectedContact?.id === contact.id ? "bg-violet-500/20 ring-1 ring-violet-400/60" : "hover:bg-white/[.06]"}`}><ProfileAvatar profile={contact} className="h-9 w-9" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{contact.displayName}</span><span className="block font-mono text-[10px] tracking-[.12em] text-slate-500">{contact.connectionCode}</span></span>{selectedContact?.id === contact.id && <Check size={17} className="text-violet-300" />}</button>)}</div> : <p className="mt-2 rounded-xl border border-dashed border-white/[.1] p-3 text-center text-xs leading-5 text-slate-500">Todos os seus contatos já estão neste grupo.</p>}<div className="my-4 flex items-center gap-3 text-[10px] font-bold uppercase tracking-[.13em] text-slate-600"><i className="h-px flex-1 bg-white/[.08]" />ou por código<i className="h-px flex-1 bg-white/[.08]" /></div><Input name="code" required={!selectedContact} disabled={Boolean(selectedContact)} maxLength={6} className="h-12 border-white/[.09] bg-[#11131d] font-mono uppercase tracking-[.2em] text-white disabled:opacity-40" placeholder="AB12CD" /><Button className="mt-4 h-11 w-full rounded-xl bg-violet-500 hover:bg-violet-400"><UserPlus size={17} />{selectedContact ? `Convidar ${selectedContact.displayName}` : "Enviar convite"}</Button></form></Modal>;
 }

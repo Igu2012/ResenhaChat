@@ -261,7 +261,11 @@ export function writeOrbitStore(store: OrbitStore, storage: Storage = localStora
     droppedAttachments += 1;
     if (tryWrite(storage, compacted)) {
       if (compacted.profile) saveAccountSnapshot(compacted, storage);
-      return { saved: true, store: { ...compacted, profile: store.profile }, droppedAttachments, clearedProfileAvatar: false };
+      // A cópia compactada é somente para persistência. O estado em memória
+      // ainda possui o anexo que acabou de ser enviado e não deve ser trocado
+      // por essa cópia, pois isso dispara um novo salvamento e pode criar um
+      // ciclo de atualizações quando a cota permanece cheia.
+      return { saved: true, store, droppedAttachments, clearedProfileAvatar: false };
     }
   }
 
@@ -269,7 +273,9 @@ export function writeOrbitStore(store: OrbitStore, storage: Storage = localStora
     compacted.profile.avatarUrl = null;
     if (tryWrite(storage, compacted)) {
       if (compacted.profile) saveAccountSnapshot(compacted, storage);
-      return { saved: true, store: { ...compacted, profile: store.profile }, droppedAttachments, clearedProfileAvatar: true };
+      // Preserve o perfil ativo durante esta sessão; a cópia sem avatar só é
+      // usada como último recurso para não perder textos e contatos no disco.
+      return { saved: true, store, droppedAttachments, clearedProfileAvatar: true };
     }
   }
 

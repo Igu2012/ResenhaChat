@@ -47,6 +47,7 @@ describe("writeOrbitStore", () => {
     expect(saved.messages["dm:a:b"][0].body).toBe("Não perca este texto");
     expect(saved.messages["dm:a:b"][0].attachment).toBeNull();
     expect(saved.messages["dm:a:b"][0].attachmentUnavailable).toBe(true);
+    expect(result.store.messages["dm:a:b"][0].attachment?.dataUrl).toBe("data:image/png;base64,conteudo-pesado");
   });
 
   it("remove reações junto com o conteúdo quando uma mensagem é excluída", () => {
