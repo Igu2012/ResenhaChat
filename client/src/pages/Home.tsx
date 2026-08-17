@@ -35,7 +35,7 @@ import {
 	  writeOrbitStore,
 	} from "@/lib/localOrbit";
 	import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, isEncryptedMessage } from "@/lib/e2ee";
-		import { checkForUpdate, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeCallOverlayPermission, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
+		import { addNativeBackButtonListener, checkForUpdate, exitNativeApp, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeCallOverlayPermission, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
 		import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
 		import { attachmentRetentionClass } from "@/lib/attachmentRetention";
 		import { AUDIO_PRE_RECORD_DELAY_MS, shouldSendHeldAudio } from "@/lib/audioRecording";
@@ -124,6 +124,12 @@ function fileAsAttachment(file: File): Promise<LocalAttachment> {
     reader.onload = () => resolve({ name: file.name, mimeType: file.type || "application/octet-stream", size: file.size, dataUrl: String(reader.result) });
     reader.readAsDataURL(file);
   });
+}
+
+function isLocalAttachment(value: unknown): value is LocalAttachment {
+  if (!value || typeof value !== "object") return false;
+  const attachment = value as Partial<LocalAttachment>;
+  return typeof attachment.name === "string" && typeof attachment.mimeType === "string" && typeof attachment.size === "number" && (typeof attachment.dataUrl === "string" || attachment.dataUrl === null);
 }
 
 function VideoTile({ stream, name, muted = false, mirrored = false, focused = false, screenShare = false, onFocus }: { stream: MediaStream; name: string; muted?: boolean; mirrored?: boolean; focused?: boolean; screenShare?: boolean; onFocus?: () => void }) {
@@ -360,7 +366,25 @@ export default function Home() {
 	    });
 	  }, [activeRoom]);
 
-  useEffect(() => {
+	  useEffect(() => {
+	    let removeListener: (() => void) | undefined;
+	    void addNativeBackButtonListener(() => {
+	      if (activeRoomRef.current) {
+	        setActiveRoom(null);
+	        setSelectedGroupId(null);
+	        setSidebarOpen(true);
+	        return;
+	      }
+	      if (sidebarOpen) {
+	        setSidebarOpen(false);
+	        return;
+	      }
+	      void exitNativeApp();
+	    }).then(remove => { removeListener = remove; });
+	    return () => { removeListener?.(); };
+	  }, [sidebarOpen]);
+
+	  useEffect(() => {
     let cancelled = false;
     void checkForUpdate().then(update => {
       if (cancelled || !update?.url) return;
@@ -939,12 +963,13 @@ export default function Home() {
   };
 
 		  const sendMessage = async (directMedia?: LocalAttachment) => {
-		    const nextAttachment = directMedia || attachment;
-		    const nextBody = directMedia ? null : compose.trim() || null;
+		    const selectedDirectMedia = isLocalAttachment(directMedia) ? directMedia : null;
+		    const nextAttachment = selectedDirectMedia || attachment;
+		    const nextBody = selectedDirectMedia ? null : compose.trim() || null;
 		    if (!profile || !activeRoom || (!nextBody && !nextAttachment)) return;
 		    if (!socket?.connected) return;
 		    if (editingMessage) {
-		      if (directMedia) { toast.error("Conclua ou cancele a edição antes de enviar uma mídia."); return; }
+		      if (selectedDirectMedia) { toast.error("Conclua ou cancele a edição antes de enviar uma mídia."); return; }
 		      if (editingMessage.author.id !== profile.id || editingMessage.deletedAt) return;
 	      const recipients = activeRoom.kind === "dm" && activeRoom.partner
 	        ? [store.contacts.find(contact => contact.id === activeRoom.partner!.id) || activeRoom.partner]
@@ -983,7 +1008,7 @@ export default function Home() {
 	        if (activeRoom.kind === "dm" && activeRoom.partner) socket.emit("direct:message", { recipientId: activeRoom.partner.id, message: outbound, attachmentRetention });
 	        if (activeRoom.kind === "channel" && selectedGroup) socket.emit("group:message", { recipientIds: selectedGroup.members.map(member => member.id), groupId: selectedGroup.id, message: outbound, attachmentRetention });
 		    setCompose("");
-		    if (!directMedia) setAttachment(null);
+		    if (!selectedDirectMedia) setAttachment(null);
 	    setReplyingTo(null);
 	  };
 

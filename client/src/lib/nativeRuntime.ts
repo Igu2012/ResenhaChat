@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
+import { App } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { PushNotifications } from "@capacitor/push-notifications";
 import type { Socket } from "socket.io-client";
@@ -47,6 +48,17 @@ export type NativeScreenCapture = { stream: MediaStream; stop: () => Promise<voi
 
 export function isNativeRuntime() {
   return Capacitor.isNativePlatform();
+}
+
+export async function addNativeBackButtonListener(onBack: () => void) {
+  if (!isNativeRuntime()) return () => undefined;
+  const listener = await App.addListener("backButton", onBack);
+  return () => { void listener.remove(); };
+}
+
+export async function exitNativeApp() {
+  if (!isNativeRuntime()) return;
+  await App.exitApp();
 }
 
 export async function startNativeScreenCapture(): Promise<NativeScreenCapture> {
