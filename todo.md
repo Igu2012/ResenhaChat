@@ -64,3 +64,13 @@
 - [x] Cobrir os dois fluxos com testes e publicar uma APK corretiva.
 - [x] Corrigir o ciclo "Maximum update depth exceeded" que fecha a tela e altera repetidamente o estado após uma chamada.
 - [x] Impedir que a recuperação de espaço local substitua em memória avatares ou anexos ainda disponíveis na sessão.
+- [x] Permitir selecionar e convidar vários contatos para um grupo em uma única ação.
+- [x] Exibir cada convite de grupo como cartão/mensagem interativa na conversa direta do contato.
+- [x] Adicionar painel de membros do servidor com avatar, status e acesso ao perfil.
+- [ ] Testar e publicar uma APK com os novos fluxos sociais.
+- [x] Fazer o banner de chamada e a notificação Android reabrirem a tela completa da call ativa.
+- [x] Ajustar a gravação móvel para iniciar após um segundo, enviar ao soltar e cancelar ao deslizar para o lado.
+- [x] Criar painel de gravação no computador com duração, enviar/parar e lixeira para cancelar.
+- [x] Permitir que o dono promova ou remova administradores pelo perfil e pela lista de membros.
+- [x] Permitir que dono e administradores renomeiem ou removam canais de texto e voz.
+- [x] Ocultar o download em áudios gravados no aplicativo, mantendo-o apenas para arquivos de áudio anexados.

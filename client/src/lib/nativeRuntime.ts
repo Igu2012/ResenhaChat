@@ -54,6 +54,12 @@ export async function addNativeBackButtonListener(onBack: () => void) {
   return () => { void listener.remove(); };
 }
 
+export async function addNativeResumeListener(onResume: () => void) {
+  if (!isNativeRuntime()) return () => undefined;
+  const listener = await App.addListener("appStateChange", ({ isActive }) => { if (isActive) onResume(); });
+  return () => { void listener.remove(); };
+}
+
 export async function exitNativeApp() {
   if (!isNativeRuntime()) return;
   await App.exitApp();

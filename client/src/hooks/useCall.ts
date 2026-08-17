@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
-import { beginNativeCallSession, endNativeCallSession, isNativeRuntime, requestNativeMediaPermission, startNativeScreenCapture, type NativeScreenCapture, updateNativeCallSession } from "@/lib/nativeRuntime";
+import { addNativeResumeListener, beginNativeCallSession, endNativeCallSession, isNativeRuntime, requestNativeMediaPermission, startNativeScreenCapture, type NativeScreenCapture, updateNativeCallSession } from "@/lib/nativeRuntime";
 
 type CallProfile = { id: string; displayName: string; avatarUrl: string | null };
 type RemotePeer = { socketId: string; stream: MediaStream; profile: CallProfile; sharingScreen: boolean };
@@ -52,6 +52,22 @@ export function useCall(socket: Socket | null) {
   const [switchingCamera, setSwitchingCamera] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const restoreCall = useCallback(() => {
+    if (roomRef.current) setMinimized(false);
+  }, []);
+
+  useEffect(() => {
+    const restoreOnForeground = () => restoreCall();
+    const onVisibilityChange = () => { if (document.visibilityState === "visible") restoreOnForeground(); };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    let removeNativeListener: () => void = () => undefined;
+    void addNativeResumeListener(restoreOnForeground).then(remove => { removeNativeListener = remove; });
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      removeNativeListener();
+    };
+  }, [restoreCall]);
 
   const nativeCallState = useCallback(() => ({
     title: sharingScreen ? "Compartilhando a tela" : "Chamada em andamento",
@@ -562,5 +578,5 @@ export function useCall(socket: Socket | null) {
     setMinimized(true);
   }, []);
 
-  return { room, localStream, remotePeers, incomingCall, outgoingCall, muted, cameraOff, sharingScreen, cameraFacing, switchingCamera, minimized, error, startCall, acceptIncomingCall, declineIncomingCall, endCall, toggleMute, toggleCamera, switchCamera, shareScreen, stopSharing, minimizeCall };
+  return { room, localStream, remotePeers, incomingCall, outgoingCall, muted, cameraOff, sharingScreen, cameraFacing, switchingCamera, minimized, error, startCall, acceptIncomingCall, declineIncomingCall, endCall, toggleMute, toggleCamera, switchCamera, shareScreen, stopSharing, minimizeCall, restoreCall };
 }

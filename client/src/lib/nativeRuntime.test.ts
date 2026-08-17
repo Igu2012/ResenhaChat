@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { APP_VERSION, addNativeBackButtonListener, beginNativeCallSession, exitNativeApp, getLatestPlatformReleaseDownloads, getLatestReleaseDownload, isNewerVersion, markUpdateDownloadOffered, requestNativeMediaPermission, requestNativeNotificationPermission, shouldOpenUpdateDownload, toPlatformReleaseDownloads, toReleaseDownload } from "./nativeRuntime";
+import { APP_VERSION, addNativeBackButtonListener, addNativeResumeListener, beginNativeCallSession, exitNativeApp, getLatestPlatformReleaseDownloads, getLatestReleaseDownload, isNewerVersion, markUpdateDownloadOffered, requestNativeMediaPermission, requestNativeNotificationPermission, shouldOpenUpdateDownload, toPlatformReleaseDownloads, toReleaseDownload } from "./nativeRuntime";
 
 afterEach(() => vi.unstubAllGlobals());
 const storage = new Map<string, string>();
@@ -13,7 +13,7 @@ beforeEach(() => {
 
 describe("isNewerVersion", () => {
   it("usa a versão centralizada do pacote de release", () => {
-    expect(APP_VERSION).toBe("1.0.15");
+    expect(APP_VERSION).toBe("1.0.16");
   });
 
   it("identifica uma release semântica mais recente", () => {
@@ -86,5 +86,10 @@ describe("ponte de chamada nativa", () => {
     const remove = await addNativeBackButtonListener(() => undefined);
     expect(remove()).toBeUndefined();
     await expect(exitNativeApp()).resolves.toBeUndefined();
+  });
+
+  it("não registra a retomada nativa fora da APK", async () => {
+    const remove = await addNativeResumeListener(() => undefined);
+    expect(remove()).toBeUndefined();
   });
 });

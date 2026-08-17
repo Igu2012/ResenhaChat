@@ -19,6 +19,7 @@ export type LocalAttachment = {
   size: number;
   dataUrl: string | null;
   unavailableOffline?: boolean;
+  recordedInApp?: boolean;
 };
 
 export type LocalReplyReference = {
