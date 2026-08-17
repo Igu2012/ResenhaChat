@@ -74,3 +74,5 @@
 - [x] Permitir que o dono promova ou remova administradores pelo perfil e pela lista de membros.
 - [x] Permitir que dono e administradores renomeiem ou removam canais de texto e voz.
 - [x] Ocultar o download em áudios gravados no aplicativo, mantendo-o apenas para arquivos de áudio anexados.
+- [ ] Substituir os rótulos visuais antigos “Orbit” por “Perfil” em toda a interface.
+- [ ] Colocar os botões de ver membros e convidar diretamente no menu lateral do servidor.
