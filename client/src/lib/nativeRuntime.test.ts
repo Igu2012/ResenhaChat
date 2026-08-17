@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { APP_VERSION, addNativeBackButtonListener, beginNativeCallSession, exitNativeApp, getLatestPlatformReleaseDownloads, getLatestReleaseDownload, isNewerVersion, markUpdateDownloadOffered, requestNativeMediaPermission, requestNativeNotificationPermission, setNativeCallOverlayVisible, shouldOpenUpdateDownload, toPlatformReleaseDownloads, toReleaseDownload } from "./nativeRuntime";
+import { APP_VERSION, addNativeBackButtonListener, beginNativeCallSession, exitNativeApp, getLatestPlatformReleaseDownloads, getLatestReleaseDownload, isNewerVersion, markUpdateDownloadOffered, requestNativeMediaPermission, requestNativeNotificationPermission, shouldOpenUpdateDownload, toPlatformReleaseDownloads, toReleaseDownload } from "./nativeRuntime";
 
 afterEach(() => vi.unstubAllGlobals());
 const storage = new Map<string, string>();
@@ -13,7 +13,7 @@ beforeEach(() => {
 
 describe("isNewerVersion", () => {
   it("usa a versão centralizada do pacote de release", () => {
-    expect(APP_VERSION).toBe("1.0.13");
+    expect(APP_VERSION).toBe("1.0.14");
   });
 
   it("identifica uma release semântica mais recente", () => {
@@ -77,8 +77,7 @@ describe("isNewerVersion", () => {
 describe("ponte de chamada nativa", () => {
   it("não tenta acessar o serviço Android na versão web", async () => {
     const session = { title: "Chamada em andamento", participants: 2, participantLabel: "Ana", cameraActive: true, sharingScreen: false };
-    await expect(beginNativeCallSession(session)).resolves.toEqual({ overlayAllowed: false });
-    await expect(setNativeCallOverlayVisible(true)).resolves.toEqual({ overlayAllowed: false });
+    await expect(beginNativeCallSession(session)).resolves.toBeUndefined();
     await expect(requestNativeNotificationPermission()).resolves.toBe(false);
     await expect(requestNativeMediaPermission({ camera: true, microphone: true })).resolves.toEqual({ camera: true, microphone: true });
   });

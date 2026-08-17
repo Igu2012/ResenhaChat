@@ -53,3 +53,9 @@
 - [x] Corrigir o erro de serialização circular que bloqueia o envio de mensagens de texto no Android.
 - [x] Integrar o botão físico de voltar do Android para sair de uma conversa e retornar à lista de contatos sem fechar o app.
 - [x] Validar e publicar uma APK corretiva com o envio de texto e a navegação Android restaurados.
+- [x] Substituir a descrição técnica de notificação de mensagem por uma frase curta e natural, sem mencionar criptografia.
+- [x] Auditar a interface e as notificações para remover textos repetitivos, técnicos ou com aparência artificial sem reduzir a clareza.
+- [ ] Publicar uma APK e o cliente web com a revisão de linguagem validada.
+- [x] Remover a exigência e os pedidos de permissão para exibir sobre outros aplicativos ao iniciar chamadas Android.
+- [x] Manter a chamada Android em execução em segundo plano por serviço foreground e notificação de chamada, inclusive ao remover o app da tela de recentes quando o sistema permitir.
+- [x] Pesquisar o comportamento recomendado do Android para chamadas em segundo plano e documentar as limitações de encerramento forçado pelo sistema.

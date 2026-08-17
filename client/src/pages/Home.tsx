@@ -35,7 +35,7 @@ import {
 	  writeOrbitStore,
 	} from "@/lib/localOrbit";
 	import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, isEncryptedMessage } from "@/lib/e2ee";
-		import { addNativeBackButtonListener, checkForUpdate, exitNativeApp, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeCallOverlayPermission, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
+		import { addNativeBackButtonListener, checkForUpdate, exitNativeApp, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
 		import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
 		import { attachmentRetentionClass } from "@/lib/attachmentRetention";
 		import { AUDIO_PRE_RECORD_DELAY_MS, shouldSendHeldAudio } from "@/lib/audioRecording";
@@ -316,11 +316,6 @@ export default function Home() {
 	  }, [store]);
 
 	  useEffect(() => {
-	    if (!profile || !isNativeRuntime()) return;
-	    void requestNativeCallOverlayPermission();
-	  }, [profile?.id]);
-
-	  useEffect(() => {
 	    setStore(current => {
 	      const previous = current.unreadRooms || {};
 	      if (JSON.stringify(previous) === JSON.stringify(unreadRooms)) return current;
@@ -404,7 +399,7 @@ export default function Home() {
 	      setStore(current => current.profile?.id === profile.id && !current.profile.encryptionPublicKey
 	        ? { ...current, profile: { ...current.profile, encryptionPublicKey } }
 	        : current);
-	    }).catch(() => toast.error("Não foi possível preparar a criptografia deste dispositivo."));
+	    }).catch(() => toast.error("Não foi possível preparar este dispositivo para conversar."));
 	    return () => { cancelled = true; };
 	  }, [profile?.encryptionPublicKey, profile?.id]);
 
@@ -535,7 +530,7 @@ export default function Home() {
 	          const content = await decryptMessageForRecipient(profileRef.current?.id || "", sender.encryptionPublicKey, message.encrypted);
           readable = { ...message, body: content.body, attachment: content.attachment, replyTo: content.replyTo };
 	        } catch {
-	          toast.error(`Não foi possível abrir a mensagem criptografada de ${sender.displayName} neste dispositivo.`);
+	          toast.error(`Não foi possível abrir a mensagem de ${sender.displayName} neste dispositivo.`);
 	          return;
 	        }
 	      }
@@ -590,7 +585,7 @@ export default function Home() {
 	            const content = await decryptMessageForRecipient(profileRef.current?.id || "", sender.encryptionPublicKey, message.encrypted);
 	            readable = { ...message, body: content.body, attachment: content.attachment, replyTo: content.replyTo };
 	          } catch {
-	            toast.error("Não foi possível abrir a edição criptografada desta mensagem.");
+	            toast.error("Não foi possível abrir a edição desta mensagem.");
 	            return;
 	          }
 	        }
@@ -798,7 +793,7 @@ export default function Home() {
 	    try {
 	      encryptionPublicKey = await ensureEncryptionPublicKey(id);
 	    } catch {
-	      toast.error("Não foi possível preparar a criptografia deste dispositivo.");
+	      toast.error("Não foi possível preparar este dispositivo para conversar.");
 	      return;
 	    }
 	    if (account?.refreshToken) saveOfficialRefreshToken(account.uid, account.refreshToken);
@@ -986,7 +981,7 @@ export default function Home() {
 	        setAttachment(null);
 	        setEditingMessage(null);
 	      } catch (error) {
-	        toast.error(error instanceof Error ? error.message : "Não foi possível criptografar a edição.");
+	        toast.error(error instanceof Error ? error.message : "Não foi possível enviar a edição.");
 	      }
 	      return;
 	    }
@@ -999,7 +994,7 @@ export default function Home() {
 	    try {
 	      encrypted = await encryptMessageForRecipients(profile.id, recipients, { body: message.body, attachment: message.attachment, replyTo });
 	    } catch (error) {
-	      toast.error(error instanceof Error ? error.message : "Não foi possível criptografar a mensagem.");
+	      toast.error(error instanceof Error ? error.message : "Não foi possível enviar a mensagem.");
 	      return;
 	    }
 	    const outbound: LocalMessage = { ...message, body: null, attachment: null, encrypted };
@@ -1128,7 +1123,7 @@ function Onboarding({ onSubmit, defaultMode = "official" }: { onSubmit: (event: 
 }
 
 function Welcome({ profile, onMenu, onAdd, onGroup }: { profile: LocalProfile; onMenu: () => void; onAdd: () => void; onGroup: () => void }) {
-  return <div className="flex h-full flex-col"><header className="flex h-16 items-center border-b border-white/[.06] px-4 md:hidden"><button className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-white/[.07]" onClick={onMenu}><Menu size={20} /></button></header><div className="grid flex-1 place-items-center p-6"><div className="orbit-enter max-w-lg text-center"><div className="mx-auto grid h-20 w-20 place-items-center rounded-[28px] bg-gradient-to-br from-violet-500 to-indigo-600 text-3xl font-black">R</div><h1 className="mt-7 text-3xl font-bold">Boas-vindas, {profile.displayName}.</h1><p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-400">É novo por aqui? Adicione um contato pelo código ou crie um grupo para começar sua conversa.</p><div className="mt-6 flex flex-wrap justify-center gap-3"><Button onClick={onAdd} className="rounded-xl bg-violet-500 hover:bg-violet-400"><UserPlus size={16} />Adicionar contato</Button><Button onClick={onGroup} variant="outline" className="rounded-xl border-white/[.1] bg-white/[.03] text-slate-200 hover:bg-white/[.08] hover:text-white"><FolderPlus size={16} />Criar grupo</Button></div><p className="mx-auto mt-6 max-w-sm text-xs leading-5 text-slate-500">Suas conversas são protegidas por criptografia de ponta a ponta.</p></div></div></div>;
+  return <div className="flex h-full flex-col"><header className="flex h-16 items-center border-b border-white/[.06] px-4 md:hidden"><button className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-white/[.07]" onClick={onMenu}><Menu size={20} /></button></header><div className="grid flex-1 place-items-center p-6"><div className="orbit-enter max-w-lg text-center"><div className="mx-auto grid h-20 w-20 place-items-center rounded-[28px] bg-gradient-to-br from-violet-500 to-indigo-600 text-3xl font-black">R</div><h1 className="mt-7 text-3xl font-bold">Boas-vindas, {profile.displayName}.</h1><p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-400">Adicione um contato pelo código ou crie um grupo para começar.</p><div className="mt-6 flex flex-wrap justify-center gap-3"><Button onClick={onAdd} className="rounded-xl bg-violet-500 hover:bg-violet-400"><UserPlus size={16} />Adicionar contato</Button><Button onClick={onGroup} variant="outline" className="rounded-xl border-white/[.1] bg-white/[.03] text-slate-200 hover:bg-white/[.08] hover:text-white"><FolderPlus size={16} />Criar grupo</Button></div></div></div></div>;
 }
 
 function GroupInviteCard({ request, onResolve }: { request: LocalRequest; onResolve: (accepted: boolean) => void }) {
@@ -1428,7 +1423,7 @@ function ChannelModal({ onClose, onCreate }: { onClose: () => void; onCreate: (n
 }
 
 function AccountManagerModal({ currentId, accounts, switchingAccount, onClose, onAdd, onSwitch, onLogout, onCancelSwitch }: { currentId: string; accounts: LocalAccountRecord[]; switchingAccount: LocalAccountRecord | null; onClose: () => void; onAdd: () => void; onSwitch: (account: LocalAccountRecord, password?: string) => void; onLogout: () => void; onCancelSwitch: () => void }) {
-  return <Modal onClose={onClose}><div className="flex items-start justify-between"><div><p className="text-[11px] font-bold uppercase tracking-[.15em] text-violet-300">Configurações</p><h2 className="mt-1 text-xl font-bold">Contas neste dispositivo</h2><p className="mt-1 text-sm text-slate-400">As senhas não são salvas. O histórico local e as chaves E2EE permanecem separados por conta.</p></div><IconButton label="Fechar" onClick={onClose}><X size={18} /></IconButton></div>{switchingAccount ? <form className="mt-5" onSubmit={event => { event.preventDefault(); onSwitch(switchingAccount, String(new FormData(event.currentTarget).get("password") || "")); }}><p className="text-sm text-slate-300">Entre novamente em <strong>@{switchingAccount.username}</strong> para liberar a sessão oficial neste dispositivo.</p><Input name="password" type="password" required minLength={8} autoFocus className="mt-4 h-11 border-white/[.09] bg-[#11131d] text-white" placeholder="Senha da conta oficial" /><div className="mt-4 grid grid-cols-2 gap-2"><Button type="button" variant="outline" onClick={onCancelSwitch} className="border-white/[.1] bg-white/[.03] text-slate-300">Voltar</Button><Button className="bg-violet-500">Entrar</Button></div></form> : <><div className="mt-5 space-y-2">{accounts.map(account => <div key={account.id} className={`flex items-center gap-3 rounded-xl border p-3 ${account.id === currentId ? "border-violet-400/50 bg-violet-500/10" : "border-white/[.08] bg-[#11131d]"}`}><ProfileAvatar profile={account.store.profile || { displayName: account.displayName, avatarUrl: account.avatarUrl }} className="h-10 w-10" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{account.displayName}</p><p className="text-xs text-slate-400">{account.accountType === "official" ? `Conta oficial · @${account.username}` : "Conta Guest · código"}</p></div>{account.id === currentId ? <span className="text-[10px] font-bold uppercase tracking-[.12em] text-violet-300">Atual</span> : <Button type="button" variant="outline" onClick={() => onSwitch(account)} className="h-8 border-white/[.1] bg-white/[.03] px-3 text-xs text-slate-200">Trocar</Button>}</div>)}</div><div className="mt-4 grid grid-cols-2 gap-2"><Button type="button" onClick={onAdd} className="h-10 bg-violet-500 hover:bg-violet-400"><Plus size={16} />Adicionar conta</Button><Button type="button" variant="outline" onClick={onLogout} className="h-10 border-rose-400/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20">Sair desta conta</Button></div></>}</Modal>;
+  return <Modal onClose={onClose}><div className="flex items-start justify-between"><div><p className="text-[11px] font-bold uppercase tracking-[.15em] text-violet-300">Configurações</p><h2 className="mt-1 text-xl font-bold">Contas neste dispositivo</h2><p className="mt-1 text-sm text-slate-400">As senhas não são salvas e os dados de cada conta permanecem separados.</p></div><IconButton label="Fechar" onClick={onClose}><X size={18} /></IconButton></div>{switchingAccount ? <form className="mt-5" onSubmit={event => { event.preventDefault(); onSwitch(switchingAccount, String(new FormData(event.currentTarget).get("password") || "")); }}><p className="text-sm text-slate-300">Entre novamente em <strong>@{switchingAccount.username}</strong> para liberar a sessão oficial neste dispositivo.</p><Input name="password" type="password" required minLength={8} autoFocus className="mt-4 h-11 border-white/[.09] bg-[#11131d] text-white" placeholder="Senha da conta oficial" /><div className="mt-4 grid grid-cols-2 gap-2"><Button type="button" variant="outline" onClick={onCancelSwitch} className="border-white/[.1] bg-white/[.03] text-slate-300">Voltar</Button><Button className="bg-violet-500">Entrar</Button></div></form> : <><div className="mt-5 space-y-2">{accounts.map(account => <div key={account.id} className={`flex items-center gap-3 rounded-xl border p-3 ${account.id === currentId ? "border-violet-400/50 bg-violet-500/10" : "border-white/[.08] bg-[#11131d]"}`}><ProfileAvatar profile={account.store.profile || { displayName: account.displayName, avatarUrl: account.avatarUrl }} className="h-10 w-10" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{account.displayName}</p><p className="text-xs text-slate-400">{account.accountType === "official" ? `Conta oficial · @${account.username}` : "Conta Guest · código"}</p></div>{account.id === currentId ? <span className="text-[10px] font-bold uppercase tracking-[.12em] text-violet-300">Atual</span> : <Button type="button" variant="outline" onClick={() => onSwitch(account)} className="h-8 border-white/[.1] bg-white/[.03] px-3 text-xs text-slate-200">Trocar</Button>}</div>)}</div><div className="mt-4 grid grid-cols-2 gap-2"><Button type="button" onClick={onAdd} className="h-10 bg-violet-500 hover:bg-violet-400"><Plus size={16} />Adicionar conta</Button><Button type="button" variant="outline" onClick={onLogout} className="h-10 border-rose-400/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20">Sair desta conta</Button></div></>}</Modal>;
 }
 
 function GifPicker({ onSelect, onEmoji, onClose }: { onSelect: (attachment: LocalAttachment) => void; onEmoji: (emoji: string) => void; onClose: () => void }) {

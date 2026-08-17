@@ -21,11 +21,9 @@ type NativeScreenSharePlugin = {
 const NativeScreenShare = registerPlugin<NativeScreenSharePlugin>("NativeScreenShare");
 
 type NativeCallOverlayPlugin = {
-  begin: (options: NativeCallSession) => Promise<{ overlayAllowed: boolean }>;
-  update: (options: NativeCallSession) => Promise<{ overlayAllowed: boolean }>;
+  begin: (options: NativeCallSession) => Promise<void>;
+  update: (options: NativeCallSession) => Promise<void>;
   end: () => Promise<void>;
-  setOverlayVisible: (options: { visible: boolean }) => Promise<{ overlayAllowed: boolean }>;
-  requestOverlayPermission: () => Promise<{ overlayAllowed: boolean }>;
 };
 
 const NativeCallOverlay = registerPlugin<NativeCallOverlayPlugin>("NativeCallOverlay");
@@ -189,28 +187,18 @@ export function runtimeApiUrl(path: string) {
 }
 
 export async function beginNativeCallSession(session: NativeCallSession) {
-  if (!isNativeRuntime()) return { overlayAllowed: false };
+  if (!isNativeRuntime()) return;
   return NativeCallOverlay.begin(session);
 }
 
 export async function updateNativeCallSession(session: NativeCallSession) {
-  if (!isNativeRuntime()) return { overlayAllowed: false };
+  if (!isNativeRuntime()) return;
   return NativeCallOverlay.update(session);
 }
 
 export async function endNativeCallSession() {
   if (!isNativeRuntime()) return;
   await NativeCallOverlay.end();
-}
-
-export async function setNativeCallOverlayVisible(visible: boolean) {
-  if (!isNativeRuntime()) return { overlayAllowed: false };
-  return NativeCallOverlay.setOverlayVisible({ visible });
-}
-
-export async function requestNativeCallOverlayPermission() {
-  if (!isNativeRuntime()) return { overlayAllowed: false };
-  return NativeCallOverlay.requestOverlayPermission();
 }
 
 export async function requestNativeNotificationPermission() {
