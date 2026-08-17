@@ -13,7 +13,7 @@ beforeEach(() => {
 
 describe("isNewerVersion", () => {
   it("usa a versão centralizada do pacote de release", () => {
-    expect(APP_VERSION).toBe("1.0.20");
+    expect(APP_VERSION).toBe("1.0.21");
   });
 
   it("identifica uma release semântica mais recente", () => {

@@ -206,7 +206,9 @@ export function readOrbitStore(): OrbitStore {
       profile: parsed.profile ?? null,
       contacts: Array.isArray(parsed.contacts) ? parsed.contacts : [],
       groups: Array.isArray(parsed.groups) ? parsed.groups : [],
-      messages: parsed.messages && typeof parsed.messages === "object" ? parsed.messages : {},
+      messages: parsed.messages && typeof parsed.messages === "object"
+        ? Object.fromEntries(Object.entries(parsed.messages).map(([roomId, messages]) => [roomId, Array.isArray(messages) ? messages.map(message => ({ ...message, attachmentUnavailable: false })) : []]))
+        : {},
       requests: Array.isArray(parsed.requests) ? parsed.requests : [],
       unreadRooms: parsed.unreadRooms && typeof parsed.unreadRooms === "object" ? parsed.unreadRooms : {},
     };

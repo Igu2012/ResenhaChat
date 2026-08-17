@@ -79,3 +79,6 @@
 - [x] Eliminar o aviso repetido de armazenamento local cheio sem apagar o estado ativo do chat.
 - [x] Manter os convites de grupo como mensagens persistentes após aceitar ou recusar.
 - [x] Proibir a remoção automática de fotos, mensagens, convites ou anexos quando faltar espaço local.
+- [ ] Redesenhar o painel superior do servidor com membros visíveis, expansão por gesto e convite integrado.
+- [ ] Remover textos e avisos visíveis que mencionem espaço ou armazenamento local.
+- [ ] Corrigir o painel de membros móvel com botão X visível e gestos estáveis.
