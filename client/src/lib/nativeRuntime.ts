@@ -92,6 +92,7 @@ type GitHubRelease = {
 };
 
 export type ReleaseDownload = { version: string | null; url: string | null };
+export type PlatformReleaseDownloads = { android: ReleaseDownload; ios: ReleaseDownload };
 
 function normalizeVersion(version: string) {
   return version.trim().replace(/^v/i, "").split("-")[0].split(".").map(part => Number.parseInt(part, 10) || 0);
@@ -107,18 +108,32 @@ export function isNewerVersion(candidate: string, current = APP_VERSION) {
   return false;
 }
 
-export function toReleaseDownload(release: GitHubRelease): ReleaseDownload {
+export function toPlatformReleaseDownloads(release: GitHubRelease): PlatformReleaseDownloads {
   const apk = release.assets?.find(asset => asset.name?.toLowerCase() === "resenhachat.apk")
     ?? release.assets?.find(asset => asset.name?.toLowerCase().endsWith(".apk"));
-  return { version: release.tag_name || null, url: apk?.browser_download_url || release.html_url || null };
+  const ipa = release.assets?.find(asset => asset.name?.toLowerCase() === "resenhachat.ipa")
+    ?? release.assets?.find(asset => asset.name?.toLowerCase().endsWith(".ipa"));
+  return {
+    android: { version: release.tag_name || null, url: apk?.browser_download_url || release.html_url || null },
+    ios: { version: release.tag_name || null, url: ipa?.browser_download_url || null },
+  };
+}
+
+export function toReleaseDownload(release: GitHubRelease): ReleaseDownload {
+  return toPlatformReleaseDownloads(release).android;
 }
 
 export async function getLatestReleaseDownload() {
+  const downloads = await getLatestPlatformReleaseDownloads();
+  return downloads?.android || null;
+}
+
+export async function getLatestPlatformReleaseDownloads() {
   try {
     const response = await fetch(RELEASES_ENDPOINT, { headers: { Accept: "application/vnd.github+json" } });
     if (!response.ok) return null;
     const release = await response.json() as GitHubRelease;
-    return toReleaseDownload(release);
+    return toPlatformReleaseDownloads(release);
   } catch {
     return null;
   }

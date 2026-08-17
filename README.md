@@ -9,3 +9,7 @@ Importe este repositório no Vercel. A configuração `vercel.json` já executa 
 ## Android e releases
 
 Execute `pnpm install`, depois `pnpm build:android`; abra a pasta `android/` no Android Studio ou execute `./gradlew assembleDebug` dentro dela. O arquivo resultante se chama `ResenhaChat.apk`. Publique-o como asset de uma GitHub Release neste repositório, pois a APK consulta este repositório para encontrar atualizações.
+
+## iPhone
+
+No iPhone, abra o site no Safari e use **Compartilhar → Adicionar à Tela de Início** para instalar o aplicativo web. O fluxo para TestFlight e uma futura IPA nativa está em [IOS_DISTRIBUTION.md](./IOS_DISTRIBUTION.md).

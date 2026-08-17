@@ -35,7 +35,7 @@ import {
 	  writeOrbitStore,
 	} from "@/lib/localOrbit";
 	import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, isEncryptedMessage } from "@/lib/e2ee";
-		import { checkForUpdate, getLatestReleaseDownload, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeCallOverlayPermission, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
+		import { checkForUpdate, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeCallOverlayPermission, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
 		import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
 		import { attachmentRetentionClass } from "@/lib/attachmentRetention";
 		import { AUDIO_PRE_RECORD_DELAY_MS, shouldSendHeldAudio } from "@/lib/audioRecording";
@@ -90,6 +90,7 @@ import { toast } from "sonner";
 type ActiveRoom = { kind: "dm" | "channel"; id: string; title: string; groupId?: string; partner?: LocalProfile };
 type ObservedCall = { room: string; participants: LocalProfile[]; startedAt: number | null };
 type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
+type MobileInstallPlatform = "android" | "ios";
 
 const MAX_LOCAL_FILE_BYTES = MAX_ATTACHMENT_BYTES;
 const APP_NAME = "Resenha Chat";
@@ -223,9 +224,17 @@ function NotificationPermissionPrompt({ permission, onEnable }: { permission: No
   return <DismissiblePrompt active={permission === "default"} className="fixed bottom-4 left-4 right-4 z-40 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-violet-400/25 bg-[#20243a]/95 p-3 shadow-2xl backdrop-blur sm:left-auto sm:right-5"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-500/20 text-violet-200"><Bell size={19} /></span><div className="min-w-0 flex-1"><p className="text-xs font-bold text-white">Ative as notificações</p><p className="mt-0.5 text-[11px] leading-4 text-slate-400">Receba avisos de novas mensagens mesmo quando estiver em outra aba.</p></div><Button onClick={onEnable} className="h-9 shrink-0 rounded-xl bg-violet-500 px-3 text-xs hover:bg-violet-400">Ativar</Button></DismissiblePrompt>;
 }
 
-function InstallAppPrompt({ available, mobileReleaseUrl, onInstall, onDownload }: { available: boolean; mobileReleaseUrl: string | null; onInstall: () => void; onDownload: () => void }) {
-  const isMobileInstall = Boolean(mobileReleaseUrl);
-  return <DismissiblePrompt active={available || isMobileInstall} className="fixed left-4 right-4 top-4 z-50 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-emerald-400/25 bg-[#20243a]/95 p-3 shadow-2xl backdrop-blur sm:left-auto sm:right-5"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/20 text-emerald-200"><MonitorUp size={19} /></span><div className="min-w-0 flex-1"><p className="text-xs font-bold text-white">{isMobileInstall ? "Baixe o app Android" : "Instale o Resenha Chat"}</p><p className="mt-0.5 text-[11px] leading-4 text-slate-400">{isMobileInstall ? "Baixe a versão mais recente da APK publicada." : "Instale pelo navegador usando o aplicativo web."}</p></div><Button onClick={isMobileInstall ? onDownload : onInstall} className="h-9 shrink-0 rounded-xl bg-emerald-500 px-3 text-xs text-white hover:bg-emerald-400">{isMobileInstall ? "Baixar APK" : "Instalar"}</Button></DismissiblePrompt>;
+function InstallAppPrompt({ available, platform, mobileReleaseUrl, iosInstallUrl, onInstall, onDownload }: { available: boolean; platform: MobileInstallPlatform | null; mobileReleaseUrl: string | null; iosInstallUrl: string | null; onInstall: () => void; onDownload: () => void }) {
+  const isAndroid = platform === "android" && Boolean(mobileReleaseUrl);
+  const isIos = platform === "ios";
+  const title = isAndroid ? "Baixe o app Android" : isIos ? (iosInstallUrl ? "Instale o app no iPhone" : "Instale no iPhone") : "Instale o Resenha Chat";
+  const description = isAndroid ? "Baixe a versão mais recente da APK publicada." : isIos ? (iosInstallUrl ? "Abra a distribuição iPhone configurada para instalar o app." : "Use o Safari para adicionar a Resenha à Tela de Início.") : "Instale pelo navegador usando o aplicativo web.";
+  const action = isAndroid ? "Baixar APK" : isIos ? (iosInstallUrl ? "Instalar" : "Como instalar") : "Instalar";
+  return <DismissiblePrompt active={available || Boolean(platform)} className="fixed left-4 right-4 top-4 z-50 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-emerald-400/25 bg-[#20243a]/95 p-3 shadow-2xl backdrop-blur sm:left-auto sm:right-5"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/20 text-emerald-200"><MonitorUp size={19} /></span><div className="min-w-0 flex-1"><p className="text-xs font-bold text-white">{title}</p><p className="mt-0.5 text-[11px] leading-4 text-slate-400">{description}</p></div><Button onClick={isAndroid || isIos ? onDownload : onInstall} className="h-9 shrink-0 rounded-xl bg-emerald-500 px-3 text-xs text-white hover:bg-emerald-400">{action}</Button></DismissiblePrompt>;
+}
+
+function IosInstallHelp({ onClose }: { onClose: () => void }) {
+  return <Modal onClose={onClose}><div className="flex items-start justify-between"><div><h2 className="text-lg font-bold">Instalar no iPhone</h2><p className="mt-1 text-sm text-slate-400">A Resenha funciona como aplicativo web no iOS.</p></div><IconButton label="Fechar" onClick={onClose}><X size={18} /></IconButton></div><ol className="mt-5 space-y-3 text-sm leading-6 text-slate-300"><li><strong className="text-white">1.</strong> Abra este site no <strong className="text-white">Safari</strong>.</li><li><strong className="text-white">2.</strong> Toque em <strong className="text-white">Compartilhar</strong> na barra do Safari.</li><li><strong className="text-white">3.</strong> Escolha <strong className="text-white">Adicionar à Tela de Início</strong> e confirme.</li></ol><p className="mt-5 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">Uma IPA não pode ser instalada diretamente por download comum: ela precisa de assinatura Apple e distribuição por TestFlight, App Store ou um fluxo corporativo/ad hoc autorizado.</p><Button onClick={onClose} className="mt-5 h-10 w-full rounded-xl bg-emerald-500 hover:bg-emerald-400">Entendi</Button></Modal>;
 }
 
 function MobileGroupRail({ groups, selectedGroupId, onMessages, onSelectGroup, onCreateGroup, onSettings }: { groups: LocalGroup[]; selectedGroupId: string | null; onMessages: () => void; onSelectGroup: (group: LocalGroup) => void; onCreateGroup: () => void; onSettings: () => void }) {
@@ -252,9 +261,12 @@ export default function Home() {
   const [managedMember, setManagedMember] = useState<LocalProfile | null>(null);
   const [voiceChannelTitle, setVoiceChannelTitle] = useState<string | null>(null);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(() => browserNotificationPermission());
-  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
-  const [isInstalled, setIsInstalled] = useState(false);
-	  const [mobileReleaseUrl, setMobileReleaseUrl] = useState<string | null>(null);
+	  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+	  const [isInstalled, setIsInstalled] = useState(false);
+		  const [mobilePlatform, setMobilePlatform] = useState<MobileInstallPlatform | null>(null);
+		  const [mobileReleaseUrl, setMobileReleaseUrl] = useState<string | null>(null);
+		  const [iosReleaseUrl, setIosReleaseUrl] = useState<string | null>(null);
+		  const [showIosInstallHelp, setShowIosInstallHelp] = useState(false);
   const [liveVoiceRooms, setLiveVoiceRooms] = useState<Record<string, boolean>>({});
   const [voiceParticipants, setVoiceParticipants] = useState<Record<string, LocalProfile[]>>({});
   const [observedCalls, setObservedCalls] = useState<Record<string, ObservedCall>>({});
@@ -310,11 +322,17 @@ export default function Home() {
 	    });
 	  }, [unreadRooms]);
 
-	  useEffect(() => {
-	    const isMobileBrowser = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && !isNativeRuntime();
-	    const standalone = window.matchMedia?.("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-	    setIsInstalled(standalone);
-	    if (isMobileBrowser && !standalone && navigator.onLine) void getLatestReleaseDownload().then(release => setMobileReleaseUrl(release?.url || "https://github.com/Igu2012/ResenhaChat/releases/latest"));
+		  useEffect(() => {
+		    const isAndroidBrowser = /Android/i.test(navigator.userAgent) && !isNativeRuntime();
+		    const isIosBrowser = /iPhone|iPad|iPod/i.test(navigator.userAgent) && !isNativeRuntime();
+		    const isMobileBrowser = isAndroidBrowser || isIosBrowser;
+		    const standalone = window.matchMedia?.("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+		    setIsInstalled(standalone);
+		    setMobilePlatform(isAndroidBrowser ? "android" : isIosBrowser ? "ios" : null);
+		    if (isMobileBrowser && !standalone && navigator.onLine) void getLatestPlatformReleaseDownloads().then(downloads => {
+		      setMobileReleaseUrl(downloads?.android.url || "https://github.com/Igu2012/ResenhaChat/releases/latest");
+		      setIosReleaseUrl(import.meta.env.VITE_IOS_INSTALL_URL?.trim() || downloads?.ios.url || null);
+		    });
 	    const onBeforeInstall = (event: Event) => { if (isMobileBrowser) return; event.preventDefault(); setInstallPrompt(event as InstallPromptEvent); };
 	    const onInstalled = () => { setInstallPrompt(null); setIsInstalled(true); toast.success("Resenha Chat instalado neste dispositivo."); };
 	    window.addEventListener("beforeinstallprompt", onBeforeInstall);
@@ -1041,7 +1059,8 @@ export default function Home() {
     {showChannel && <ChannelModal onClose={() => setShowChannel(false)} onCreate={createChannel} />}
 	    {managedMember && selectedGroup && <ServerMemberManagerModal member={managedMember} serverProfile={selectedGroup.memberProfiles?.[managedMember.id]} canChangeRole={selectedGroup.ownerId === profile.id} onClose={() => setManagedMember(null)} onSave={(values: { role: "admin" | "member"; displayName: string; tag: string; tagColor: string }) => saveServerMember(managedMember, values)} onRemove={selectedGroup.ownerId === profile.id ? () => removeServerMember(managedMember) : undefined} />}
     {viewedProfile && <ProfileViewer profile={viewedProfile} serverProfile={selectedGroup?.memberProfiles?.[viewedProfile.id]} ownId={profile.id} onClose={() => setViewedProfile(null)} onMessage={() => { openDirect(viewedProfile); setViewedProfile(null); }} />}
-	    <InstallAppPrompt available={Boolean(installPrompt) && !isInstalled} mobileReleaseUrl={!isInstalled ? mobileReleaseUrl : null} onInstall={() => void requestAppInstall()} onDownload={() => { if (mobileReleaseUrl) window.open(mobileReleaseUrl, "_blank", "noopener,noreferrer"); }} />
+	    <InstallAppPrompt available={Boolean(installPrompt) && !isInstalled} platform={!isInstalled ? mobilePlatform : null} mobileReleaseUrl={!isInstalled ? mobileReleaseUrl : null} iosInstallUrl={!isInstalled ? iosReleaseUrl : null} onInstall={() => void requestAppInstall()} onDownload={() => { if (mobilePlatform === "ios" && !iosReleaseUrl) { setShowIosInstallHelp(true); return; } const target = mobilePlatform === "ios" ? iosReleaseUrl : mobileReleaseUrl; if (target) window.open(target, "_blank", "noopener,noreferrer"); }} />
+	    {showIosInstallHelp && <IosInstallHelp onClose={() => setShowIosInstallHelp(false)} />}
     <NotificationPermissionPrompt permission={notificationPermission} onEnable={() => void requestBrowserNotifications()} />
   </div>;
 }

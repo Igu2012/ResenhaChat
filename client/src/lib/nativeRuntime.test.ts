@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { APP_VERSION, beginNativeCallSession, getLatestReleaseDownload, isNewerVersion, markUpdateDownloadOffered, requestNativeMediaPermission, requestNativeNotificationPermission, setNativeCallOverlayVisible, shouldOpenUpdateDownload, toReleaseDownload } from "./nativeRuntime";
+import { APP_VERSION, beginNativeCallSession, getLatestPlatformReleaseDownloads, getLatestReleaseDownload, isNewerVersion, markUpdateDownloadOffered, requestNativeMediaPermission, requestNativeNotificationPermission, setNativeCallOverlayVisible, shouldOpenUpdateDownload, toPlatformReleaseDownloads, toReleaseDownload } from "./nativeRuntime";
 
 afterEach(() => vi.unstubAllGlobals());
 const storage = new Map<string, string>();
@@ -13,7 +13,7 @@ beforeEach(() => {
 
 describe("isNewerVersion", () => {
   it("usa a versão centralizada do pacote de release", () => {
-    expect(APP_VERSION).toBe("1.0.11");
+    expect(APP_VERSION).toBe("1.0.12");
   });
 
   it("identifica uma release semântica mais recente", () => {
@@ -45,6 +45,25 @@ describe("isNewerVersion", () => {
         { name: "ResenhaChat.apk", browser_download_url: "https://downloads.example/ResenhaChat.apk" },
       ],
     })).toEqual({ version: "v1.2.0", url: "https://downloads.example/ResenhaChat.apk" });
+  });
+
+  it("separa a APK da IPA quando a mesma release fornece os dois instaladores", async () => {
+    const release = {
+      tag_name: "v1.0.12",
+      assets: [
+        { name: "ResenhaChat.apk", browser_download_url: "https://downloads.example/ResenhaChat.apk" },
+        { name: "ResenhaChat.ipa", browser_download_url: "https://downloads.example/ResenhaChat.ipa" },
+      ],
+    };
+    expect(toPlatformReleaseDownloads(release)).toEqual({
+      android: { version: "v1.0.12", url: "https://downloads.example/ResenhaChat.apk" },
+      ios: { version: "v1.0.12", url: "https://downloads.example/ResenhaChat.ipa" },
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => release }));
+    await expect(getLatestPlatformReleaseDownloads()).resolves.toEqual({
+      android: { version: "v1.0.12", url: "https://downloads.example/ResenhaChat.apk" },
+      ios: { version: "v1.0.12", url: "https://downloads.example/ResenhaChat.ipa" },
+    });
   });
 
   it("abre o download automático somente uma vez por versão", () => {
