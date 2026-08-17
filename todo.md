@@ -36,3 +36,13 @@
 - [x] Validar e publicar uma APK com as correções de perfil, áudio, notificações e mensagens.
 - [x] Enviar ao servidor apenas a classe de retenção do anexo, preservando o conteúdo criptografado e sem gerar nova APK.
 - [x] Validar a entrega de mensagens com metadados de retenção no cliente web.
+- [ ] Integrar a recuperação segura dos dados sociais e envelopes persistidos no Firebase sem expor chaves E2EE privadas.
+- [ ] Enviar anexos criptografados ao servidor para persistência no Google Drive e recuperar referências de mensagens off-line.
+- [x] Implementar gravação de áudio por pressão: pré-gravação após um segundo e envio ao soltar após dois segundos.
+- [x] Manter GIFs, figurinhas e áudios gravados como mensagens, sem classificá-los como anexos de galeria.
+- [x] Remover a explicação de popularidade padrão da busca de GIFs e simplificar a interface do seletor no celular.
+- [x] Diferenciar visualmente mídias enviadas como mensagem dos arquivos escolhidos na galeria no compositor.
+- [x] Mover a alteração de senha para um painel sobreposto, acessível pelo perfil sem exigir rolagem no celular.
+- [x] Enviar GIFs, figurinhas e áudios gravados diretamente como mensagens sem exibir a barra de anexo no compositor.
+- [x] Cancelar com segurança gravações por pressão inferiores a dois segundos e liberar o microfone em todos os fluxos de ponteiro.
+- [x] Validar em desktop e mobile o seletor de mídia simplificado e o modal de alteração de senha.
