@@ -34,3 +34,5 @@
 - [x] Adicionar visualizador ampliado de imagens e vídeos com zoom e controles em tela cheia.
 - [x] Integrar `google-services.json` e validar o registro de token FCM na APK.
 - [x] Validar e publicar uma APK com as correções de perfil, áudio, notificações e mensagens.
+- [x] Enviar ao servidor apenas a classe de retenção do anexo, preservando o conteúdo criptografado e sem gerar nova APK.
+- [x] Validar a entrega de mensagens com metadados de retenção no cliente web.
