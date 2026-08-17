@@ -32,6 +32,7 @@ export function useCall(socket: Socket | null) {
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const facingModeRef = useRef<"user" | "environment">("user");
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
+  const cameraWasActiveBeforeShareRef = useRef(false);
   const nativeScreenCaptureRef = useRef<NativeScreenCapture | null>(null);
   const screenSharingPeersRef = useRef(new Set<string>());
   const liveAudienceRef = useRef<string[]>([]);
@@ -442,7 +443,11 @@ export function useCall(socket: Socket | null) {
   }, []);
 
   const toggleCamera = useCallback(async () => {
-    if (sharingScreen || !streamRef.current) return;
+    if (!streamRef.current) return;
+    if (sharingScreen) {
+      setError("Pare o compartilhamento de tela antes de ativar a câmera. Uma chamada usa apenas uma fonte visual por vez.");
+      return;
+    }
     const track = cameraTrackRef.current;
     if (!track || track.readyState === "ended") {
       try {
@@ -538,6 +543,12 @@ export function useCall(socket: Socket | null) {
       setError("Esta versão da APK não oferece captura de tela. Atualize o Android System WebView e tente novamente.");
       return;
     }
+    const cameraTrack = cameraTrackRef.current;
+    cameraWasActiveBeforeShareRef.current = Boolean(cameraTrack && cameraTrack.readyState === "live" && cameraTrack.enabled);
+    if (cameraTrack) {
+      cameraTrack.enabled = false;
+      setCameraOff(true);
+    }
     try {
       const nativeCapture = nativeMobileCapture ? await startNativeScreenCapture() : null;
       const screenStream = nativeCapture?.stream || await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { max: 20 } }, audio: true });
@@ -558,6 +569,10 @@ export function useCall(socket: Socket | null) {
       if (roomRef.current) socket?.emit("call:media-state", { room: roomRef.current, sharingScreen: true, recipientIds: liveAudienceRef.current });
       screenTrack.onended = () => { void stopSharing(); };
     } catch (reason) {
+      if (cameraTrack && cameraWasActiveBeforeShareRef.current && cameraTrack.readyState === "live") {
+        cameraTrack.enabled = true;
+        setCameraOff(false);
+      }
       const detail = reason instanceof Error && reason.message ? ` ${reason.message}` : "";
       setError(isNativeRuntime() ? `O compartilhamento de tela foi cancelado ou bloqueado pelo Android.${detail}` : `O compartilhamento de tela foi cancelado ou bloqueado pelo navegador.${detail}`);
     }

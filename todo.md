@@ -23,3 +23,5 @@
 - [x] Encerrar a sala de chamada após três minutos com apenas um participante, para reduzir uso de recursos.
 - [x] Validar e publicar uma APK com as melhorias de mídia e interações de mensagens.
 - [x] Exibir as iniciais do servidor como avatar reserva quando não houver imagem definida.
+- [x] Impedir que câmera e compartilhamento de tela fiquem ativos ao mesmo tempo em chamadas.
+- [ ] Validar e publicar uma APK com a regra de fonte visual única.
