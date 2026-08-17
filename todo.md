@@ -67,7 +67,7 @@
 - [x] Permitir selecionar e convidar vários contatos para um grupo em uma única ação.
 - [x] Exibir cada convite de grupo como cartão/mensagem interativa na conversa direta do contato.
 - [x] Adicionar painel de membros do servidor com avatar, status e acesso ao perfil.
-- [ ] Testar e publicar uma APK com os novos fluxos sociais.
+- [x] Testar e publicar uma APK com os novos fluxos sociais.
 - [x] Fazer o banner de chamada e a notificação Android reabrirem a tela completa da call ativa.
 - [x] Ajustar a gravação móvel para iniciar após um segundo, enviar ao soltar e cancelar ao deslizar para o lado.
 - [x] Criar painel de gravação no computador com duração, enviar/parar e lixeira para cancelar.
