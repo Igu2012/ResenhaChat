@@ -50,6 +50,6 @@
 - [x] Publicar a nova APK como `ResenhaChat.apk` na release mais recente do GitHub.
 - [x] Direcionar o aviso de instalação do site para a APK no Android e para a distribuição iPhone/PWA adequada no iPhone.
 - [x] Documentar os requisitos de assinatura e publicação necessários para distribuir uma IPA instalável em iPhones.
-- [ ] Corrigir o erro de serialização circular que bloqueia o envio de mensagens de texto no Android.
-- [ ] Integrar o botão físico de voltar do Android para sair de uma conversa e retornar à lista de contatos sem fechar o app.
-- [ ] Validar e publicar uma APK corretiva com o envio de texto e a navegação Android restaurados.
+- [x] Corrigir o erro de serialização circular que bloqueia o envio de mensagens de texto no Android.
+- [x] Integrar o botão físico de voltar do Android para sair de uma conversa e retornar à lista de contatos sem fechar o app.
+- [x] Validar e publicar uma APK corretiva com o envio de texto e a navegação Android restaurados.
