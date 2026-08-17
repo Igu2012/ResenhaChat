@@ -46,7 +46,7 @@
 - [x] Enviar GIFs, figurinhas e áudios gravados diretamente como mensagens sem exibir a barra de anexo no compositor.
 - [x] Cancelar com segurança gravações por pressão inferiores a dois segundos e liberar o microfone em todos os fluxos de ponteiro.
 - [x] Validar em desktop e mobile o seletor de mídia simplificado e o modal de alteração de senha.
-- [ ] Incrementar a versão Android e gerar uma APK assinada contendo mídia direta, gravação por pressão e senha em sobreposição.
-- [ ] Publicar a nova APK como `ResenhaChat.apk` na release mais recente do GitHub.
-- [ ] Direcionar o aviso de instalação do site para a APK no Android e para a distribuição iPhone/PWA adequada no iPhone.
-- [ ] Documentar os requisitos de assinatura e publicação necessários para distribuir uma IPA instalável em iPhones.
+- [x] Incrementar a versão Android e gerar uma APK assinada contendo mídia direta, gravação por pressão e senha em sobreposição.
+- [x] Publicar a nova APK como `ResenhaChat.apk` na release mais recente do GitHub.
+- [x] Direcionar o aviso de instalação do site para a APK no Android e para a distribuição iPhone/PWA adequada no iPhone.
+- [x] Documentar os requisitos de assinatura e publicação necessários para distribuir uma IPA instalável em iPhones.
