@@ -22,9 +22,9 @@ describe("writeOrbitStore", () => {
     });
   });
 
-  it("mantém a mensagem e remove apenas a cópia pesada do anexo quando a cota é excedida", () => {
+  it("não remove foto, mensagem ou anexo quando a cota local é excedida", () => {
     const store: OrbitStore = {
-      profile: null,
+      profile: { id: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "", avatarUrl: "data:image/png;base64,conteudo-pesado" },
       contacts: [],
       groups: [],
       requests: [],
@@ -41,13 +41,23 @@ describe("writeOrbitStore", () => {
     };
 
     const result = writeOrbitStore(store);
-    expect(result.saved).toBe(true);
-    expect(result.droppedAttachments).toBe(1);
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as OrbitStore;
-    expect(saved.messages["dm:a:b"][0].body).toBe("Não perca este texto");
-    expect(saved.messages["dm:a:b"][0].attachment).toBeNull();
-    expect(saved.messages["dm:a:b"][0].attachmentUnavailable).toBe(true);
+    expect(result.saved).toBe(false);
+    expect(result.droppedAttachments).toBe(0);
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(result.store.profile?.avatarUrl).toBe("data:image/png;base64,conteudo-pesado");
+    expect(result.store.messages["dm:a:b"][0].body).toBe("Não perca este texto");
     expect(result.store.messages["dm:a:b"][0].attachment?.dataUrl).toBe("data:image/png;base64,conteudo-pesado");
+  });
+
+  it("preserva o cartão de convite e sua resposta no histórico local", () => {
+    const ana = { id: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "", avatarUrl: null };
+    const group = { id: "grupo", name: "Resenha", imageUrl: null, ownerId: "ana", members: [ana], channels: [] };
+    const store: OrbitStore = { profile: ana, contacts: [], groups: [], requests: [], messages: { "dm:ana:bia": [{ id: "invite:1", roomId: "dm:ana:bia", author: ana, body: null, attachment: null, createdAt: "2026-08-17T00:00:00.000Z", groupInvite: { id: "group:1", kind: "group", from: ana, group, createdAt: "2026-08-17T00:00:00.000Z" }, groupInviteStatus: "accepted" }] } };
+
+    expect(writeOrbitStore(store).saved).toBe(true);
+    const restored = readOrbitStore();
+    expect(restored.messages["dm:ana:bia"][0].groupInvite?.group?.name).toBe("Resenha");
+    expect(restored.messages["dm:ana:bia"][0].groupInviteStatus).toBe("accepted");
   });
 
   it("remove reações junto com o conteúdo quando uma mensagem é excluída", () => {

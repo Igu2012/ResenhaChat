@@ -76,3 +76,6 @@
 - [x] Ocultar o download em áudios gravados no aplicativo, mantendo-o apenas para arquivos de áudio anexados.
 - [x] Substituir os rótulos visuais antigos “Orbit” por “Perfil” em toda a interface.
 - [x] Colocar os botões de ver membros e convidar diretamente no menu lateral do servidor.
+- [ ] Eliminar o aviso repetido de armazenamento local cheio sem apagar o estado ativo do chat.
+- [ ] Manter os convites de grupo como mensagens persistentes após aceitar ou recusar.
+- [ ] Proibir a remoção automática de fotos, mensagens, convites ou anexos quando faltar espaço local.

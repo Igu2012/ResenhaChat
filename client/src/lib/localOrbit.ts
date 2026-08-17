@@ -44,6 +44,7 @@ export type LocalMessage = {
   deletedAt?: string;
   deletedBy?: string;
   groupInvite?: LocalRequest;
+  groupInviteStatus?: "accepted" | "declined";
 };
 
 export type LocalChannel = { id: string; name: string; kind?: "text" | "voice" };
@@ -246,40 +247,8 @@ export function writeOrbitStore(store: OrbitStore, storage: Storage = localStora
     if (persistedStore.profile) saveAccountSnapshot(persistedStore, storage);
     return { saved: true, store, droppedAttachments: 0, clearedProfileAvatar: false };
   }
-
-  const compacted = cloneOrbitStore(persistedStore);
-  const attachments = Object.entries(compacted.messages)
-    .flatMap(([roomId, messages]) => messages.map((message, index) => ({ roomId, index, createdAt: message.createdAt, hasAttachment: Boolean(message.attachment) })))
-    .filter(item => item.hasAttachment)
-    .sort((first, second) => second.createdAt.localeCompare(first.createdAt));
-
-  let droppedAttachments = 0;
-  for (const candidate of attachments) {
-    const message = compacted.messages[candidate.roomId]?.[candidate.index];
-    if (!message?.attachment) continue;
-    message.attachment = null;
-    message.attachmentUnavailable = true;
-    droppedAttachments += 1;
-    if (tryWrite(storage, compacted)) {
-      if (compacted.profile) saveAccountSnapshot(compacted, storage);
-      // A cópia compactada é somente para persistência. O estado em memória
-      // ainda possui o anexo que acabou de ser enviado e não deve ser trocado
-      // por essa cópia, pois isso dispara um novo salvamento e pode criar um
-      // ciclo de atualizações quando a cota permanece cheia.
-      return { saved: true, store, droppedAttachments, clearedProfileAvatar: false };
-    }
-  }
-
-  if (compacted.profile?.avatarUrl) {
-    compacted.profile.avatarUrl = null;
-    if (tryWrite(storage, compacted)) {
-      if (compacted.profile) saveAccountSnapshot(compacted, storage);
-      // Preserve o perfil ativo durante esta sessão; a cópia sem avatar só é
-      // usada como último recurso para não perder textos e contatos no disco.
-      return { saved: true, store, droppedAttachments, clearedProfileAvatar: true };
-    }
-  }
-
+  // A falta de espaço não pode alterar nem compactar os dados do usuário.
+  // Mantemos a sessão intacta e aguardamos uma próxima tentativa de gravação.
   return { saved: false, store, droppedAttachments: 0, clearedProfileAvatar: false };
 }
 
