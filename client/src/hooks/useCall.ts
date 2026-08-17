@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
-import { beginNativeCallSession, endNativeCallSession, isNativeRuntime, requestNativeCallOverlayPermission, requestNativeMediaPermission, setNativeCallOverlayVisible, startNativeScreenCapture, type NativeScreenCapture, updateNativeCallSession } from "@/lib/nativeRuntime";
+import { beginNativeCallSession, endNativeCallSession, isNativeRuntime, requestNativeMediaPermission, startNativeScreenCapture, type NativeScreenCapture, updateNativeCallSession } from "@/lib/nativeRuntime";
 
 type CallProfile = { id: string; displayName: string; avatarUrl: string | null };
 type RemotePeer = { socketId: string; stream: MediaStream; profile: CallProfile; sharingScreen: boolean };
@@ -73,20 +73,6 @@ export function useCall(socket: Socket | null) {
     if (!room || !isNativeRuntime()) return;
     void updateNativeCallSession(nativeCallState());
   }, [nativeCallState, room]);
-
-  useEffect(() => {
-    if (!room || !isNativeRuntime()) return;
-    const syncOverlay = () => {
-      const hidden = document.visibilityState !== "visible";
-      void setNativeCallOverlayVisible(hidden);
-      if (!hidden) setMinimized(false);
-    };
-    syncOverlay();
-    document.addEventListener("visibilitychange", syncOverlay);
-    return () => {
-      document.removeEventListener("visibilitychange", syncOverlay);
-    };
-  }, [room]);
 
   const stopRingtone = useCallback(() => {
     if (ringtoneRef.current !== null) window.clearInterval(ringtoneRef.current);
@@ -177,13 +163,7 @@ export function useCall(socket: Socket | null) {
     setMinimized(false);
   }, [socket, stopIncomingAlert]);
 
-  const ensureOverlayPermission = useCallback(async () => {
-    if (!isNativeRuntime()) return true;
-    const result = await requestNativeCallOverlayPermission();
-    if (result.overlayAllowed) return true;
-    setError("Para entrar na chamada, permita ‘Aparecer sobre outros apps’ e volte para a Resenha Chat.");
-    return false;
-  }, []);
+  const ensureOverlayPermission = useCallback(async () => true, []);
 
   const activeTracks = useCallback(() => {
     const stream = streamRef.current;
@@ -579,9 +559,7 @@ export function useCall(socket: Socket | null) {
   }, [sendDescription, socket, stopSharing]);
 
   const minimizeCall = useCallback(async () => {
-    if (!isNativeRuntime()) return;
     setMinimized(true);
-    await setNativeCallOverlayVisible(true);
   }, []);
 
   return { room, localStream, remotePeers, incomingCall, outgoingCall, muted, cameraOff, sharingScreen, cameraFacing, switchingCamera, minimized, error, startCall, acceptIncomingCall, declineIncomingCall, endCall, toggleMute, toggleCamera, switchCamera, shareScreen, stopSharing, minimizeCall };

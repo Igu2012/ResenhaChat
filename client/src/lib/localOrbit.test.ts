@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { accountStoreForSwitch, applyOfficialSession, createEmptyOrbitStore, deleteMessagesByAuthor, directRoomId, migrateGuestToOfficial, readAccountVault, readOfficialRefreshToken, readOrbitStore, saveAccountSnapshot, writeOrbitStore, type OrbitStore } from "./localOrbit";
+import { accountStoreForSwitch, applyOfficialSession, createEmptyOrbitStore, deleteMessagesByAuthor, directRoomId, migrateGuestToOfficial, readAccountVault, readOfficialRefreshToken, readOrbitStore, replaceProfileEverywhere, saveAccountSnapshot, writeOrbitStore, type OrbitStore } from "./localOrbit";
 
 const STORAGE_KEY = "orbit-chat.local-store.v2";
 
@@ -53,6 +53,17 @@ describe("writeOrbitStore", () => {
     const author = { id: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "", avatarUrl: null };
     const deleted = deleteMessagesByAuthor({ "dm:ana:bia": [{ id: "m1", roomId: "dm:ana:bia", author, body: "Oi", attachment: null, createdAt: "2026-08-16T00:00:00.000Z", reactions: { "👍": ["ana", "bia"] } }] }, "dm:ana:bia", "ana", "ana");
     expect(deleted["dm:ana:bia"][0]).toMatchObject({ body: null, attachment: null, reactions: {} });
+  });
+
+  it("atualiza a identidade em contatos, grupos e mensagens históricas", () => {
+    const oldProfile = { id: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "", avatarUrl: null };
+    const refreshed = { ...oldProfile, displayName: "ANA", avatarUrl: "data:image/png;base64,nova-foto" };
+    const store: OrbitStore = { profile: oldProfile, contacts: [oldProfile], groups: [{ id: "grupo", name: "Grupo", imageUrl: null, ownerId: "ana", members: [oldProfile], channels: [] }], requests: [], messages: { "dm:ana:bia": [{ id: "m1", roomId: "dm:ana:bia", author: oldProfile, body: "histórico", attachment: null, createdAt: "2026-08-16T00:00:00.000Z" }] } };
+    const updated = replaceProfileEverywhere(store, refreshed);
+    expect(updated.profile?.displayName).toBe("ANA");
+    expect(updated.contacts[0].avatarUrl).toBe(refreshed.avatarUrl);
+    expect(updated.groups[0].members[0].displayName).toBe("ANA");
+    expect(updated.messages["dm:ana:bia"][0].author.avatarUrl).toBe(refreshed.avatarUrl);
   });
 
   it("salva múltiplas contas sem persistir tokens de autenticação", () => {

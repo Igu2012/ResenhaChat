@@ -96,7 +96,7 @@ public class CallForegroundService extends Service {
     cameraActive = intent.getBooleanExtra(EXTRA_CAMERA, cameraActive);
     sharingScreen = intent.getBooleanExtra(EXTRA_SHARING, sharingScreen);
     startCallForeground();
-    refreshOverlay();
+    hideOverlay();
     return START_STICKY;
   }
 
@@ -235,10 +235,9 @@ public class CallForegroundService extends Service {
 
   @Override
   public void onTaskRemoved(Intent rootIntent) {
-    // A tarefa do WebView pode sair da tela de recentes sem que a chamada seja desligada.
-    // Mantemos a notificação e deixamos o atalho flutuante disponível para abrir a chamada.
-    overlayVisible = true;
-    refreshOverlay();
+    // Mantemos a notificação e o serviço da chamada, sem criar conteúdo sobre outros apps.
+    overlayVisible = false;
+    hideOverlay();
     super.onTaskRemoved(rootIntent);
   }
 

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "511544894010",
+    "project_id": "resenhachat1",
+    "storage_bucket": "resenhachat1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:511544894010:android:d34501775b5eee87814b03",
+        "android_client_info": {
+          "package_name": "com.resenhachat.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAC5usqTdJfyLXVFBm85OU-gL5X13Mv7vc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

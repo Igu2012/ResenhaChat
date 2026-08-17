@@ -9,6 +9,7 @@ export const APP_VERSION = __RESENHA_APP_VERSION__;
 const RELEASES_ENDPOINT = "https://api.github.com/repos/Igu2012/ResenhaChat/releases/latest";
 const RESENHA_API_ORIGIN = (import.meta.env.VITE_RESENHA_SERVER_URL || "https://resenhudochat.onrender.com").replace(/\/+$/, "");
 const LAST_OFFERED_UPDATE_KEY = "resenha-chat:last-offered-update";
+const PUSH_TOKEN_KEY = "resenha-chat:native-push-token";
 
 type NativeScreenSharePlugin = {
   start: () => Promise<{ width: number; height: number }>;
@@ -33,6 +34,12 @@ type NativeMediaPermissionPlugin = {
 };
 
 const NativeMediaPermission = registerPlugin<NativeMediaPermissionPlugin>("NativeMediaPermission");
+
+type NativePushTopicsPlugin = {
+  subscribe: (options: { topic: string }) => Promise<{ subscribed: boolean }>;
+};
+
+const NativePushTopics = registerPlugin<NativePushTopicsPlugin>("NativePushTopics");
 
 export type NativeCallSession = { title: string; participants: number; participantLabel: string; cameraActive: boolean; sharingScreen: boolean };
 
@@ -206,9 +213,40 @@ export async function requestNativeMediaPermission(options: { camera: boolean; m
 export async function registerNativePush(socket: Socket) {
   if (!isNativeRuntime()) return () => undefined;
   const listeners: PluginListenerHandle[] = [];
-  const permission = await PushNotifications.requestPermissions();
+  let permission = await PushNotifications.checkPermissions();
+  if (permission.receive === "prompt") permission = await PushNotifications.requestPermissions();
   if (permission.receive !== "granted") return () => undefined;
+  const sendToken = (token: string | null) => {
+    if (token && socket.connected) socket.emit("push:register", { token });
+  };
+  const cachedToken = (() => {
+    try { return localStorage.getItem(PUSH_TOKEN_KEY); } catch { return null; }
+  })();
+  const onConnect = () => sendToken(cachedToken);
+  socket.on("connect", onConnect);
+  listeners.push(await PushNotifications.addListener("registration", token => {
+    try { localStorage.setItem(PUSH_TOKEN_KEY, token.value); } catch { /* armazenamento opcional */ }
+    sendToken(token.value);
+  }));
+  listeners.push(await PushNotifications.addListener("registrationError", () => undefined));
   await PushNotifications.register();
-  listeners.push(await PushNotifications.addListener("registration", token => socket.emit("push:register", { token: token.value })));
-  return () => { listeners.forEach(listener => void listener.remove()); };
+  sendToken(cachedToken);
+  return () => {
+    socket.off("connect", onConnect);
+    listeners.forEach(listener => void listener.remove());
+  };
+}
+
+function nativePushTopic(profileId: string) {
+  return `resenha_${profileId.replace(/[^A-Za-z0-9_-]/g, "_")}`.slice(0, 900);
+}
+
+export async function subscribeNativePushProfile(profileId: string) {
+  if (!isNativeRuntime() || !profileId) return false;
+  try {
+    const result = await NativePushTopics.subscribe({ topic: nativePushTopic(profileId) });
+    return result.subscribed;
+  } catch {
+    return false;
+  }
 }

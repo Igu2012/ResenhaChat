@@ -38,6 +38,8 @@ export type LocalMessage = {
   encrypted?: EncryptedMessage;
   reactions?: Record<string, string[]>;
   replyTo?: LocalReplyReference;
+  editedAt?: string;
+  pinnedAt?: string;
   deletedAt?: string;
   deletedBy?: string;
   groupInvite?: LocalRequest;
@@ -104,6 +106,18 @@ export function redactOrbitStore(store: OrbitStore): OrbitStore {
     requests: (store.requests || []).map(request => ({ ...request, from: redactAuthor(request.from), group: request.group ? { ...request.group, members: (request.group.members || []).map(redactAuthor) } : undefined })),
     messages: Object.fromEntries(Object.entries(store.messages || {}).map(([roomId, messages]) => [roomId, messages.map(message => ({ ...message, author: redactAuthor(message.author) }))])),
     unreadRooms: { ...(store.unreadRooms || {}) },
+  };
+}
+
+export function replaceProfileEverywhere(store: OrbitStore, profile: LocalProfile): OrbitStore {
+  const merge = (current: LocalProfile) => current.id === profile.id ? { ...current, ...profile } : current;
+  return {
+    ...store,
+    profile: store.profile ? merge(store.profile) : null,
+    contacts: (store.contacts || []).map(merge),
+    groups: (store.groups || []).map(group => ({ ...group, members: (group.members || []).map(merge) })),
+    requests: (store.requests || []).map(request => ({ ...request, from: merge(request.from), group: request.group ? { ...request.group, members: (request.group.members || []).map(merge) } : undefined })),
+    messages: Object.fromEntries(Object.entries(store.messages || {}).map(([roomId, messages]) => [roomId, messages.map(message => ({ ...message, author: merge(message.author) }))])),
   };
 }
 

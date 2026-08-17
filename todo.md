@@ -25,3 +25,12 @@
 - [x] Exibir as iniciais do servidor como avatar reserva quando não houver imagem definida.
 - [x] Impedir que câmera e compartilhamento de tela fiquem ativos ao mesmo tempo em chamadas.
 - [x] Validar e publicar uma APK com a regra de fonte visual única.
+- [x] Sincronizar foto, display name e perfis atualizados entre contatos e mensagens existentes.
+- [x] Corrigir o envio e recebimento de áudios entre usuários.
+- [x] Aceitar letras maiúsculas em nomes de usuário, preservando a busca sem diferenciar maiúsculas e minúsculas.
+- [x] Criar menu de ações de mensagem com edição, encaminhamento, marcar como não lida, fixar e ações de mídia.
+- [x] Entregar notificações de mensagem em tempo real com o aplicativo em segundo plano.
+- [x] Remover a janela flutuante da chamada e preservar a reconexão discreta em segundo plano.
+- [x] Adicionar visualizador ampliado de imagens e vídeos com zoom e controles em tela cheia.
+- [x] Integrar `google-services.json` e validar o registro de token FCM na APK.
+- [x] Validar e publicar uma APK com as correções de perfil, áudio, notificações e mensagens.
