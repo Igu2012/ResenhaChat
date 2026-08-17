@@ -61,6 +61,6 @@
 - [x] Pesquisar o comportamento recomendado do Android para chamadas em segundo plano e documentar as limitações de encerramento forçado pelo sistema.
 - [x] Corrigir o aviso indevido de falta de espaço local exibido após um anexo já ser enviado com sucesso.
 - [x] Corrigir o convite de grupo para que o contato selecionado seja convidado sem validar o campo de código vazio.
-- [ ] Cobrir os dois fluxos com testes e publicar uma APK corretiva.
+- [x] Cobrir os dois fluxos com testes e publicar uma APK corretiva.
 - [x] Corrigir o ciclo "Maximum update depth exceeded" que fecha a tela e altera repetidamente o estado após uma chamada.
 - [x] Impedir que a recuperação de espaço local substitua em memória avatares ou anexos ainda disponíveis na sessão.
