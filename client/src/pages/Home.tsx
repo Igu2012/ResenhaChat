@@ -1266,7 +1266,31 @@ function OfficialOnlyEntryPanel({ onSubmit }: { onSubmit: (event: React.FormEven
   const [intent, setIntent] = useState<"register" | "login">("register");
   const [showPassword, setShowPassword] = useState(false);
   const passwordField = (confirmation = false) => <div className="relative mt-2"><Input name={confirmation ? "passwordConfirmation" : "password"} type={showPassword ? "text" : "password"} required minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} pattern={PASSWORD_HTML_PATTERN} autoComplete={intent === "login" ? "current-password" : "new-password"} className="h-11 border-white/[.09] bg-[#11131d] pr-11 text-white" placeholder={confirmation ? "Repita sua senha" : "Senha"} /><button type="button" onClick={() => setShowPassword(value => !value)} className="absolute inset-y-0 right-0 grid w-11 place-items-center text-slate-400 hover:text-white" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>;
-  return <main className="grid min-h-dvh place-items-center overflow-hidden bg-[#10121a] px-4"><div className="absolute -left-24 -top-28 h-80 w-80 rounded-full bg-violet-600/25 blur-3xl" /><form onSubmit={event => { void onSubmit(event); }} className="orbit-enter relative w-full max-w-[470px] rounded-[28px] border border-white/[.09] bg-[#1c1f2c]/90 p-8 shadow-2xl"><div className="flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#78b43d] text-lg font-black">R</div><div><p className="font-bold text-white">Resenha Chat</p><p className="text-xs text-slate-400">Converse na mesma conta em qualquer dispositivo</p></div></div><h1 className="mt-8 text-2xl font-bold text-white">{intent === "register" ? "Crie sua conta." : "Entre na sua conta."}</h1><p className="mt-2 text-sm leading-6 text-slate-400">{intent === "register" ? "Escolha um nome de usuário e uma senha para começar." : "Use o nome de usuário e a senha da sua conta."}</p><input type="hidden" name="mode" value="official" /><input type="hidden" name="intent" value={intent} /><label className="mt-6 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Nome de usuário<Input name="username" required minLength={USERNAME_MIN_LENGTH} maxLength={USERNAME_MAX_LENGTH} pattern={USERNAME_HTML_PATTERN} autoComplete="username" className="mt-2 h-11 border-white/[.09] bg-[#11131d] text-white" placeholder="Escolha um nome de usuário" /></label>{intent === "register" && <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Nome de exibição<Input name="name" minLength={2} maxLength={64} className="mt-2 h-11 border-white/[.09] bg-[#11131d] text-white" placeholder="Como as pessoas vão te chamar?" /></label>}<label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Senha{passwordField()}</label>{intent === "register" && <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Repita a senha{passwordField(true)}</label>}<Button className="mt-6 h-11 w-full rounded-xl bg-violet-500 font-bold hover:bg-violet-400">{intent === "login" ? "Entrar" : "Criar conta"}</Button><div className="mt-5 border-t border-white/[.08] pt-4 text-center text-xs text-slate-500">{intent === "register" ? <>Já tem uma conta? <button type="button" onClick={() => setIntent("login")} className="font-bold text-violet-300 hover:text-violet-200">Entrar</button></> : <>Ainda não tem conta? <button type="button" onClick={() => setIntent("register")} className="font-bold text-violet-300 hover:text-violet-200">Criar conta</button></>}</div></form></main>;
+  const heading = intent === "register" ? "Crie sua conta." : "Entre na sua conta.";
+  const description = intent === "register" ? "Escolha um nome de usuário e uma senha." : "Use seu nome de usuário e senha.";
+
+  return <main className="grid min-h-dvh place-items-center overflow-hidden bg-[#10121a] px-4">
+    <div className="absolute -left-24 -top-28 h-80 w-80 rounded-full bg-violet-600/25 blur-3xl" />
+    <form onSubmit={event => { void onSubmit(event); }} className="orbit-enter relative w-full max-w-[470px] rounded-[28px] border border-white/[.09] bg-[#1c1f2c]/90 p-8 shadow-2xl">
+      <div className="flex items-center gap-3">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#78b43d] text-lg font-black">R</div>
+        <div><p className="font-bold text-white">Resenha Chat</p><p className="text-xs text-slate-400">Suas conversas ficam protegidas.</p></div>
+      </div>
+      <h1 className="mt-8 text-2xl font-bold text-white">{heading}</h1>
+      <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>
+      <input type="hidden" name="mode" value="official" />
+      <input type="hidden" name="intent" value={intent} />
+      <label className="mt-6 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Nome de usuário
+        <Input name="username" required minLength={USERNAME_MIN_LENGTH} maxLength={USERNAME_MAX_LENGTH} pattern={USERNAME_HTML_PATTERN} autoComplete="username" className="mt-2 h-11 border-white/[.09] bg-[#11131d] text-white" placeholder="Escolha um nome de usuário" />
+      </label>
+      <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Senha{passwordField()}</label>
+      {intent === "register" && <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Repita a senha{passwordField(true)}</label>}
+      <Button className="mt-6 h-11 w-full rounded-xl bg-violet-500 font-bold hover:bg-violet-400">{intent === "login" ? "Entrar" : "Criar conta"}</Button>
+      <div className="mt-5 border-t border-white/[.08] pt-4 text-center text-xs text-slate-500">
+        {intent === "register" ? <>Já tem uma conta? <button type="button" onClick={() => setIntent("login")} className="font-bold text-violet-300 hover:text-violet-200">Entrar</button></> : <>Ainda não tem conta? <button type="button" onClick={() => setIntent("register")} className="font-bold text-violet-300 hover:text-violet-200">Criar conta</button></>}
+      </div>
+    </form>
+  </main>;
 }
 
 function EntryPanel({ onSubmit }: { onSubmit: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void> }) {

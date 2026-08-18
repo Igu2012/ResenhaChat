@@ -100,3 +100,5 @@
 - [x] Ocultar nomes de arquivo em GIFs, figurinhas e áudios gravados no app, mantendo-os nos anexos da galeria.
 - [x] Usar miniaturas mais leves no seletor de GIFs e figurinhas sem reduzir a mídia enviada à conversa.
 - [x] Reproduzir vídeos enviados diretamente na conversa, mantendo a tela ampliada como opção.
+- [x] Remover o campo de nome de exibição do cadastro e usar o nome de usuário no perfil inicial.
+- [x] Substituir textos genéricos do cadastro por uma explicação curta sobre a proteção das conversas.
