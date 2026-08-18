@@ -93,7 +93,7 @@
 - [x] Definir e implementar a sincronização por conta no Google Drive para perfil, contatos, servidores, mensagens e solicitações entre dispositivos.
 - [x] Manter segredos de criptografia no cliente e sincronizar apenas dados e envelopes protegidos por conta.
 - [x] Bloquear a criação e remover o suporte a perfis Guest.
-- [ ] Executar, após confirmação final, o reset definitivo de contas e dados sociais existentes no Drive e no Firebase.
+- [x] Executar, após confirmação final, o reset definitivo de contas e dados sociais existentes no Drive e no Firebase.
 - [x] Corrigir a atualização e a exibição da lista de membros em servidores.
 - [x] Remover o aviso interno sobre mensagens recuperadas enquanto o usuário estava off-line.
 - [x] Exibir abaixo do nome do contato um indicador de digitação em conversas diretas.
