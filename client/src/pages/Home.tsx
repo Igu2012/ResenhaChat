@@ -816,7 +816,7 @@ export default function Home() {
 	      driveSyncRevisionRef.current = result.revision;
 	      if (!result.snapshot) return;
 	      const remote = await decryptAccountSnapshot(password, result.snapshot);
-	      await restoreStoredKeyPair(account.id, remote.keyPair);
+	      try { await restoreStoredKeyPair(account.id, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
 	      setStore(applyOfficialSession(remote.store, { uid: account.id, username: account.username, idToken: account.authToken }));
 	    } catch (error) {
 	      console.warn("Não foi possível sincronizar a conta no Drive.", error);
@@ -896,19 +896,25 @@ export default function Home() {
 	    let remoteStore: OrbitStore | null = null;
 	    if (account?.idToken) {
 	      driveSyncPasswordRef.current = password;
+	      let remoteSnapshot: Awaited<ReturnType<typeof fetchAccountSnapshot>> | null = null;
 	      try {
-	        const remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), account.uid, account.idToken);
+	        remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), account.uid, account.idToken);
 	        driveSyncRevisionRef.current = remoteSnapshot.revision;
-		        if (remoteSnapshot.snapshot) {
-		          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
-		          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
-		          remoteStore = remote.store;
-		          await restoreStoredKeyPair(account.uid, remote.keyPair);
-		        }
-		      } catch (error) {
-		        console.warn("Não foi possível recuperar os dados da conta no Drive.", error);
-		        if (data.get("intent") === "login") { toast.error("Não foi possível abrir os dados protegidos desta conta. Confira a senha e tente novamente."); return; }
-		      }
+	      } catch (error) {
+	        console.warn("Não foi possível recuperar os dados da conta no Drive.", error);
+	      }
+	      if (remoteSnapshot?.snapshot) {
+	        try {
+	          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
+	          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
+	          remoteStore = remote.store;
+	          try { await restoreStoredKeyPair(account.uid, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
+	        } catch (error) {
+	          console.warn("Não foi possível abrir a cópia da conta.", error);
+	          toast.error("Não foi possível abrir sua conta. Tente novamente.");
+	          return;
+	        }
+	      }
 	    }
 	    let encryptionPublicKey: JsonWebKey;
 	    try {
@@ -970,20 +976,25 @@ export default function Home() {
 	      if (!result.idToken) { toast.error("A sessão da conta não foi iniciada corretamente."); return; }
 	      driveSyncPasswordRef.current = password;
 	      let restoredStore = accountStoreForSwitch(record);
+	      let remoteSnapshot: Awaited<ReturnType<typeof fetchAccountSnapshot>> | null = null;
 	      try {
-	        const remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), result.uid, result.idToken);
+	        remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), result.uid, result.idToken);
 	        driveSyncRevisionRef.current = remoteSnapshot.revision;
-		        if (remoteSnapshot.snapshot) {
-		          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
-		          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
-		          await restoreStoredKeyPair(result.uid, remote.keyPair);
-		          restoredStore = remote.store;
-		        }
-		      } catch (error) {
-		        console.warn("Não foi possível restaurar a conta no Drive.", error);
-		        toast.error("Não foi possível abrir os dados protegidos desta conta. Confira a senha e tente novamente.");
-		        return;
-		      }
+	      } catch (error) {
+	        console.warn("Não foi possível restaurar a conta no Drive.", error);
+	      }
+	      if (remoteSnapshot?.snapshot) {
+	        try {
+	          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
+	          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
+	          try { await restoreStoredKeyPair(result.uid, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
+	          restoredStore = remote.store;
+	        } catch (error) {
+	          console.warn("Não foi possível abrir a cópia da conta.", error);
+	          toast.error("Não foi possível abrir sua conta. Tente novamente.");
+	          return;
+	        }
+	      }
 	      const syncedStore = applyOfficialSession(restoredStore, result);
 	      setStore(syncedStore);
 	      void syncOfficialStoreToDrive(syncedStore);
@@ -1320,7 +1331,7 @@ function OfficialOnlyEntryPanel({ onSubmit }: { onSubmit: (event: React.FormEven
     <form onSubmit={event => { void onSubmit(event); }} className="orbit-enter relative w-full max-w-[470px] rounded-[28px] border border-white/[.09] bg-[#1c1f2c]/90 p-8 shadow-2xl">
       <div className="flex items-center gap-3">
         <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#78b43d] text-lg font-black">R</div>
-        <div><p className="font-bold text-white">Resenha Chat</p><p className="text-xs text-slate-400">Suas conversas ficam protegidas.</p></div>
+	        <div><p className="font-bold text-white">Resenha Chat</p></div>
       </div>
       <h1 className="mt-8 text-2xl font-bold text-white">{heading}</h1>
       <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>

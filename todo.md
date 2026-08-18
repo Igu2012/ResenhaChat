@@ -119,3 +119,7 @@
 - [x] Bloquear a entrada até que o snapshot remoto seja lido, decifrado e aplicado ou até que seja confirmado que não existe cópia remota.
 - [x] Exibir e registrar um erro claro se a cópia da conta não puder ser recuperada, sem substituir os dados remotos por um perfil novo.
 - [x] Corrigir a leitura e a aplicação da cópia de conta no APK Android para igualar o comportamento do navegador.
+- [x] Corrigir a abertura da cópia de conta no APK quando o mesmo login funciona no navegador.
+- [x] Revisar textos visíveis para usar mensagens curtas, naturais e sem detalhes técnicos ou linguagem genérica.
+- [x] Corrigir a leitura da cópia de conta que falha tanto no site quanto no APK.
+- [x] Substituir o aviso de abertura por uma mensagem curta e natural.
