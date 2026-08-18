@@ -140,3 +140,8 @@
 - [x] Melhorar e destacar o toque de chamadas recebidas.
 - [x] Oferecer uma única vez o silenciamento de chamadas de uma pessoa ao recusar.
 - [x] Adicionar modo Não perturbe no perfil e exibi-lo para os outros usuários.
+- [x] Salvar vídeos e outras mídias enviadas na cópia da conta antes de fechar o site ou aplicativo.
+- [x] Testar que vídeo enviado continua disponível após reabrir a conta.
+- [x] Salvar e exibir corretamente a capa de vídeo após reabrir a conta.
+- [x] Salvar de forma confiável imagens, vídeos, áudios e arquivos enviados após reabrir a conta.
+- [x] Corrigir o envio de anexos escolhidos da galeria sem afetar imagens e áudios gravados.

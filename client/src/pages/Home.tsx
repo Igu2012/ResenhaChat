@@ -122,12 +122,46 @@ function Modal({ children, onClose }: { children: React.ReactNode; onClose: () =
   return <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/75 p-4 backdrop-blur-sm" onMouseDown={onClose}><div className="orbit-enter w-full max-w-md rounded-3xl border border-white/[.09] bg-[#1d2030] p-6 shadow-2xl" onMouseDown={event => event.stopPropagation()}>{children}</div></div>;
 }
 
+function createVideoPreview(dataUrl: string): Promise<string | null> {
+  return new Promise(resolve => {
+    if (typeof document === "undefined") return resolve(null);
+    const video = document.createElement("video");
+    const finish = (value: string | null) => { video.removeAttribute("src"); video.load(); resolve(value); };
+    const timer = window.setTimeout(() => finish(null), 5_000);
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    video.onloadedmetadata = () => { video.currentTime = Math.min(0.15, Math.max(0, (video.duration || 0) / 2)); };
+    video.onseeked = () => {
+      try {
+        const width = Math.min(480, video.videoWidth || 480);
+        const height = Math.max(1, Math.round(width * (video.videoHeight || 270) / (video.videoWidth || 480)));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")?.drawImage(video, 0, 0, width, height);
+        window.clearTimeout(timer);
+        finish(canvas.toDataURL("image/jpeg", 0.76));
+      } catch {
+        window.clearTimeout(timer);
+        finish(null);
+      }
+    };
+    video.onerror = () => { window.clearTimeout(timer); finish(null); };
+    video.src = dataUrl;
+  });
+}
+
 function fileAsAttachment(file: File): Promise<LocalAttachment> {
   return new Promise((resolve, reject) => {
     if (!acceptsAttachmentSize(file.size)) return reject(new Error("No modo local, o arquivo deve ter no máximo 15 MB."));
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Não foi possível ler o arquivo."));
-    reader.onload = () => resolve({ name: file.name, mimeType: file.type || "application/octet-stream", size: file.size, dataUrl: String(reader.result) });
+    reader.onload = async () => {
+      const dataUrl = String(reader.result);
+      const mimeType = file.type || "application/octet-stream";
+      resolve({ name: file.name, mimeType, size: file.size, dataUrl, previewDataUrl: mimeType.startsWith("video/") ? await createVideoPreview(dataUrl) : undefined });
+    };
     reader.readAsDataURL(file);
   });
 }
@@ -326,6 +360,7 @@ export default function Home() {
 	  const driveSyncPasswordRef = useRef<string | null>(null);
 	  const driveSyncRevisionRef = useRef(0);
 	  const driveSyncRunningRef = useRef(false);
+	  const queuedDriveSyncRef = useRef<OrbitStore | null>(null);
 	  const storeRef = useRef<OrbitStore>(store);
   const contactIdsRef = useRef<string[]>(store.contacts.map(contact => contact.id));
   const syncContactPresenceRef = useRef<(() => void) | null>(null);
@@ -838,24 +873,43 @@ export default function Home() {
 	  const syncOfficialStoreToDrive = async (candidate: OrbitStore) => {
 	    const account = candidate.profile;
 	    const password = driveSyncPasswordRef.current;
-	    if (!account || account.accountType !== "official" || !account.authToken || !password || driveSyncRunningRef.current) return;
+	    if (!account || account.accountType !== "official" || !account.authToken || !password) return;
+	    if (driveSyncRunningRef.current) {
+	      queuedDriveSyncRef.current = candidate;
+	      return;
+	    }
 	    driveSyncRunningRef.current = true;
+	    let next: OrbitStore | null = candidate;
 	    try {
-	      const snapshot = await encryptAccountSnapshot(password, { store: redactOrbitStore(candidate), keyPair: exportStoredKeyPair(account.id) });
-	      const result = await saveAccountSnapshotToDrive(runtimeApiUrl("/api/account/sync"), account.id, account.authToken, driveSyncRevisionRef.current, snapshot);
-	      if (!result.conflict) {
-	        driveSyncRevisionRef.current = result.revision;
-	        return;
+	      while (next) {
+	        queuedDriveSyncRef.current = null;
+	        const nextAccount = next.profile;
+	        if (!nextAccount || nextAccount.accountType !== "official" || !nextAccount.authToken) break;
+	        const snapshot = await encryptAccountSnapshot(password, { store: redactOrbitStore(next), keyPair: exportStoredKeyPair(nextAccount.id) });
+	        const result = await saveAccountSnapshotToDrive(runtimeApiUrl("/api/account/sync"), nextAccount.id, nextAccount.authToken, driveSyncRevisionRef.current, snapshot);
+	        if (!result.conflict) {
+	          driveSyncRevisionRef.current = result.revision;
+	        } else {
+	          driveSyncRevisionRef.current = result.revision;
+	          if (result.snapshot) {
+	            const remote = await decryptAccountSnapshot(password, result.snapshot);
+	            try { await restoreStoredKeyPair(nextAccount.id, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
+	            const restored = applyOfficialSession(remote.store, { uid: nextAccount.id, username: nextAccount.username, idToken: nextAccount.authToken });
+	            setStore(restored);
+	            next = queuedDriveSyncRef.current || restored;
+	            continue;
+	          }
+	        }
+	        next = queuedDriveSyncRef.current;
 	      }
-	      driveSyncRevisionRef.current = result.revision;
-	      if (!result.snapshot) return;
-	      const remote = await decryptAccountSnapshot(password, result.snapshot);
-	      try { await restoreStoredKeyPair(account.id, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
-	      setStore(applyOfficialSession(remote.store, { uid: account.id, username: account.username, idToken: account.authToken }));
 	    } catch (error) {
 	      console.warn("Não foi possível sincronizar a conta no Drive.", error);
+	      window.setTimeout(() => { void syncOfficialStoreToDrive(storeRef.current); }, 1_500);
 	    } finally {
 	      driveSyncRunningRef.current = false;
+	      const queued = queuedDriveSyncRef.current;
+	      queuedDriveSyncRef.current = null;
+	      if (queued) void syncOfficialStoreToDrive(queued);
 	    }
 	  };
 
@@ -871,6 +925,16 @@ export default function Home() {
 	    const retry = window.setInterval(() => { void syncOfficialStoreToDrive(storeRef.current); }, 20_000);
 	    return () => window.clearInterval(retry);
 	  }, [store.profile?.id, store.profile?.authToken]);
+
+	  useEffect(() => {
+	    const flushAccountCopy = () => { if (document.visibilityState === "hidden") void syncOfficialStoreToDrive(storeRef.current); };
+	    document.addEventListener("visibilitychange", flushAccountCopy);
+	    window.addEventListener("pagehide", flushAccountCopy);
+	    return () => {
+	      document.removeEventListener("visibilitychange", flushAccountCopy);
+	      window.removeEventListener("pagehide", flushAccountCopy);
+	    };
+	  }, [store.profile?.id]);
 
   const requestBrowserNotifications = async () => {
     if (isNativeRuntime()) {
@@ -1265,7 +1329,9 @@ export default function Home() {
 	      return;
 	    }
 	    const outbound: LocalMessage = { ...message, body: null, attachment: null, encrypted };
-	    updateStore(current => ({ ...current, messages: appendMessage(current.messages, message) }));
+	    const storeWithMessage = { ...storeRef.current, messages: appendMessage(storeRef.current.messages, message) };
+	    setStore(storeWithMessage);
+	    if (message.attachment?.dataUrl) void syncOfficialStoreToDrive(storeWithMessage);
 	        const attachmentRetention = attachmentRetentionClass(message.attachment);
 		        if (activeRoom.kind === "dm" && activeRoom.partner) socket.emit("direct:message", { recipientId: activeRoom.partner.id, message: outbound, attachmentRetention }, (result: { ok: boolean; message?: string }) => { if (result?.ok) signalSentMessage(); });
 		        if (activeRoom.kind === "channel" && selectedGroup) socket.emit("group:message", { recipientIds: selectedGroup.members.map(member => member.id), groupId: selectedGroup.id, message: outbound, attachmentRetention }, (result: { ok: boolean; message?: string }) => { if (result?.ok) signalSentMessage(); });
@@ -1475,10 +1541,10 @@ function AttachmentView({ attachment }: { attachment: LocalAttachment }) {
   const isVideo = attachment.mimeType.startsWith("video/");
   if (attachment.mimeType.startsWith("audio/") && attachment.recordedInApp) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio controls src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /></div>;
   const open = () => { setZoom(1); setExpanded(true); };
-  const viewer = expanded && <div className="fixed inset-0 z-[70] flex flex-col bg-black/95 p-4" role="dialog" aria-label={`Visualizar ${attachment.name}`}><header className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-sm font-semibold text-white">{attachment.name}</p><div className="flex items-center gap-2">{isImage && <Button type="button" onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} variant="outline" className="border-white/20 text-white"><Maximize2 size={16} />{Math.round(zoom * 100)}%</Button>}<a href={attachment.dataUrl} download={attachment.name} className="grid h-9 w-9 place-items-center rounded-lg text-slate-200 hover:bg-white/10" aria-label="Baixar"><Download size={18} /></a><IconButton label="Fechar visualização" onClick={() => setExpanded(false)}><X size={19} /></IconButton></div></header><div className="mt-4 flex min-h-0 flex-1 items-center justify-center overflow-auto">{isImage ? <img src={attachment.dataUrl} alt={attachment.name} onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} className="max-h-full max-w-full cursor-zoom-in rounded-xl object-contain transition-transform duration-200" style={{ transform: `scale(${zoom})` }} /> : <video controls autoPlay src={attachment.dataUrl} className="max-h-full max-w-full rounded-xl" />}</div></div>;
+	  const viewer = expanded && <div className="fixed inset-0 z-[70] flex flex-col bg-black/95 p-4" role="dialog" aria-label={`Visualizar ${attachment.name}`}><header className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-sm font-semibold text-white">{attachment.name}</p><div className="flex items-center gap-2">{isImage && <Button type="button" onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} variant="outline" className="border-white/20 text-white"><Maximize2 size={16} />{Math.round(zoom * 100)}%</Button>}<a href={attachment.dataUrl} download={attachment.name} className="grid h-9 w-9 place-items-center rounded-lg text-slate-200 hover:bg-white/10" aria-label="Baixar"><Download size={18} /></a><IconButton label="Fechar visualização" onClick={() => setExpanded(false)}><X size={19} /></IconButton></div></header><div className="mt-4 flex min-h-0 flex-1 items-center justify-center overflow-auto">{isImage ? <img src={attachment.dataUrl} alt={attachment.name} onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} className="max-h-full max-w-full cursor-zoom-in rounded-xl object-contain transition-transform duration-200" style={{ transform: `scale(${zoom})` }} /> : <video controls autoPlay poster={attachment.previewDataUrl || undefined} src={attachment.dataUrl} className="max-h-full max-w-full rounded-xl" />}</div></div>;
   if (isImage) return <><button type="button" onClick={open} className="mt-2 block max-w-md overflow-hidden rounded-xl border border-white/[.08] text-left"><img src={attachment.dataUrl} alt={attachment.sentAsMessage ? "Mídia enviada" : attachment.name} className="max-h-80 w-full object-cover" />{!attachment.sentAsMessage && <span className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400"><Maximize2 size={14} />{attachment.name}</span>}</button>{viewer}</>;
   if (attachment.mimeType.startsWith("audio/")) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio controls src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /><a href={attachment.dataUrl} download={attachment.name} className="text-[10px] font-semibold text-violet-300">Baixar</a></div>;
-  if (isVideo) return <div className="mt-2 max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black"><video controls playsInline preload="metadata" src={attachment.dataUrl} className="max-h-80 w-full" />{!attachment.sentAsMessage && <div className="flex items-center gap-2 bg-white/[.04] px-3 py-2 text-xs text-slate-400"><FileIcon size={14} /><span className="truncate">{attachment.name}</span></div>}</div>;
+	  if (isVideo) return <div className="mt-2 max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black"><video controls playsInline preload="metadata" poster={attachment.previewDataUrl || undefined} src={attachment.dataUrl} className="max-h-80 w-full" />{!attachment.sentAsMessage && <div className="flex items-center gap-2 bg-white/[.04] px-3 py-2 text-xs text-slate-400"><FileIcon size={14} /><span className="truncate">{attachment.name}</span></div>}</div>;
   return <a href={attachment.dataUrl} download={attachment.name} className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><FileIcon size={18} /></span><span className="min-w-0"><span className="block truncate text-xs font-bold">{attachment.name}</span><span className="text-[10px] text-slate-500">{attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : "GIF"} · Baixar</span></span></a>;
 }
 

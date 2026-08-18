@@ -19,6 +19,7 @@ export type LocalAttachment = {
   mimeType: string;
   size: number;
   dataUrl: string | null;
+  previewDataUrl?: string | null;
   unavailableOffline?: boolean;
   recordedInApp?: boolean;
   sentAsMessage?: "gif" | "sticker";
