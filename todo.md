@@ -130,3 +130,5 @@
 - [x] Corrigir o travamento que impede toques e cliques nos botões do aplicativo.
 - [x] Corrigir a reconexão automática que deixa o aplicativo preso em “Conectando”.
 - [x] Corrigir a reconexão compartilhada entre o site e o aplicativo.
+- [x] Investigar e corrigir a rejeição de conexão diretamente no servidor.
+- [x] Verificar se a configuração OAuth ausente no servidor interfere na conexão das contas.
