@@ -910,10 +910,24 @@ export default function Home() {
 	    const rememberedAccount = account ? readAccountVault().find(record => record.id === account?.uid || record.accountUid === account?.uid || record.username === account?.username) : undefined;
 	    let rememberedStore = rememberedAccount ? accountStoreForSwitch(rememberedAccount) : store;
 	    if (remoteStore) rememberedStore = mergeAccountStores(remoteStore, rememberedStore);
-	    const rememberedProfile = rememberedStore.profile;
-	    const restoredProfile = rememberedProfile && account
-	      ? { ...next, avatarUrl: next.avatarUrl || rememberedProfile.avatarUrl, bio: next.bio || rememberedProfile.bio, displayName: rememberedProfile.displayName || next.displayName, encryptionPublicKey: next.encryptionPublicKey || rememberedProfile.encryptionPublicKey }
-	      : next;
+    const rememberedProfile = rememberedStore.profile;
+    const persistedProfile = remoteStore?.profile || rememberedProfile;
+    const restoredProfile = persistedProfile && account
+      ? {
+        ...persistedProfile,
+        ...next,
+        id: account.uid,
+        accountUid: account.uid,
+        username: account.username,
+        authToken: account.idToken,
+        accountType: "official" as const,
+        connectionCode: persistedProfile.connectionCode || next.connectionCode,
+        avatarUrl: next.avatarUrl || persistedProfile.avatarUrl,
+        bio: next.bio || persistedProfile.bio,
+        displayName: persistedProfile.displayName || next.displayName,
+        encryptionPublicKey: persistedProfile.encryptionPublicKey || next.encryptionPublicKey,
+      }
+      : next;
 	    const nextStore = rememberedStore.profile?.accountType === "guest" && account ? migrateGuestToOfficial(rememberedStore, restoredProfile) : { ...rememberedStore, profile: restoredProfile };
 	    profileRef.current = restoredProfile;
 	    const saved = writeOrbitStore(nextStore);
@@ -940,8 +954,21 @@ export default function Home() {
 	      let result: OfficialLogin;
 	      try { result = await loginOfficialAccount(runtimeApiUrl("/api/account/login"), record.username, password); }
 	      catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível entrar nesta conta."); return; }
-	      const nextStore = accountStoreForSwitch(record);
-	      setStore(applyOfficialSession(nextStore, result));
+	      if (!result.idToken) { toast.error("A sessão da conta não foi iniciada corretamente."); return; }
+	      driveSyncPasswordRef.current = password;
+	      let restoredStore = accountStoreForSwitch(record);
+	      try {
+	        const remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), result.uid, result.idToken);
+	        driveSyncRevisionRef.current = remoteSnapshot.revision;
+	        if (remoteSnapshot.snapshot) {
+	          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
+	          await restoreStoredKeyPair(result.uid, remote.keyPair);
+	          restoredStore = mergeAccountStores(remote.store, restoredStore);
+	        }
+	      } catch (error) {
+	        console.warn("Não foi possível restaurar a conta no Drive.", error);
+	      }
+	      setStore(applyOfficialSession(restoredStore, result));
 	    } else {
 	      setStore(accountStoreForSwitch(record));
 	    }

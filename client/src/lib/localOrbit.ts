@@ -82,7 +82,7 @@ const STORAGE_KEY = "orbit-chat.local-store.v2";
 const ACCOUNT_VAULT_KEY = "resenha-chat.account-vault.v1";
 const REFRESH_TOKEN_KEY = "resenha-chat.official-refresh-tokens.v1";
 const RESET_MARKER_KEY = "resenha-chat.data-reset-id";
-export const ACTIVE_DATA_RESET_ID = "2026-08-18-drive-account-reset-v1";
+export const ACTIVE_DATA_RESET_ID = "2026-08-18-drive-account-reset-v2";
 const EMPTY_STORE: OrbitStore = { profile: null, contacts: [], groups: [], messages: {}, requests: [], unreadRooms: {} };
 
 export type LocalAccountRecord = {

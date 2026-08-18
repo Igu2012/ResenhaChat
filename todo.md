@@ -106,3 +106,7 @@
 - [x] Entregar solicitações de contato pendentes quando o destinatário voltar ao aplicativo.
 - [x] Remover o aviso que exige que a outra pessoa mantenha a Resenha aberta para adicionar contato.
 - [x] Exibir um controle claro para sair de canais de voz de servidores sem encerrar o aplicativo.
+- [x] Salvar integralmente no servidor o estado da conta: perfil, contatos, servidores, mensagens, solicitações e referências de mídia.
+- [x] Restaurar esse estado ao entrar na mesma conta em outro dispositivo, sem depender do cache anterior do aparelho.
+- [x] Cobrir a sincronização entre dois dispositivos com testes automatizados.
+- [x] Executar um novo reset autorizado de contas, dados e arquivos da Resenha antes do relançamento da sincronização completa.
