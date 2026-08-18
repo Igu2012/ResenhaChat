@@ -82,3 +82,6 @@
 - [x] Redesenhar o painel superior do servidor com membros visíveis, expansão por gesto e convite integrado.
 - [x] Remover textos e avisos visíveis que mencionem espaço ou armazenamento local.
 - [x] Corrigir o painel de membros móvel com botão X visível e gestos estáveis.
+- [ ] Substituir a faixa de membros por um ícone único no cabeçalho que abra a lista em menu central, com convite dentro dela.
+- [ ] Remover os botões de chamada do cabeçalho do canal e manter chamadas nos canais de voz.
+- [ ] Padronizar textos visíveis de “grupo” para “servidor”.
