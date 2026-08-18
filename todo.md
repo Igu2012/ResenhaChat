@@ -85,5 +85,7 @@
 - [x] Substituir a faixa de membros por um ícone único no cabeçalho que abra a lista em menu central, com convite dentro dela.
 - [x] Remover os botões de chamada do cabeçalho do canal e manter chamadas nos canais de voz.
 - [x] Padronizar textos visíveis de “grupo” para “servidor”.
-- [ ] Remover o ícone de membros duplicado do cabeçalho do servidor.
-- [ ] Confirmar e reforçar a persistência da foto de perfil após reiniciar o app.
+- [x] Remover o ícone de membros duplicado do cabeçalho do servidor.
+- [x] Confirmar e reforçar a persistência da foto de perfil após reiniciar o app.
+- [x] Restaurar os botões de chamada de áudio e vídeo nas conversas diretas, mantendo-os ocultos nos cabeçalhos de servidores.
+- [x] Abrir o perfil do contato ao tocar no cabeçalho da conversa direta, sem exibir um botão separado de perfil.

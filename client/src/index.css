@@ -61,12 +61,6 @@ body {
   }
 }
 
-/* Chamadas são iniciadas pelos canais de voz; não duplicar ações no cabeçalho. */
-button[aria-label="Chamada de áudio"],
-button[aria-label="Chamada de vídeo"] {
-  display: none !important;
-}
-
 button,
 input,
 textarea {
