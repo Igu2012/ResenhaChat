@@ -124,3 +124,6 @@
 - [x] Corrigir a leitura da cópia de conta que falha tanto no site quanto no APK.
 - [x] Substituir o aviso de abertura por uma mensagem curta e natural.
 - [x] Impedir que a conta seja encerrada repetidamente no site e na APK.
+- [x] Separar corretamente a foto de perfil de cada conta no mesmo dispositivo.
+- [x] Corrigir o envio de mensagens entre usuários.
+- [x] Corrigir a adição de contatos por código e nome de usuário.

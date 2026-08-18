@@ -487,8 +487,9 @@ export default function Home() {
     syncContactPresenceRef.current?.();
   }, [store.contacts]);
 
-  useEffect(() => {
-    if (!profile) return;
+	  useEffect(() => {
+	    if (profile?.accountType === "official" && !profile.authToken) return;
+	    if (!profile) return;
 	    const instance = io(getRuntimeServerOrigin(), { path: "/api/socket.io", auth: { profile }, transports: ["polling", "websocket"], upgrade: true, reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 700, reconnectionDelayMax: 5000, randomizationFactor: 0.35, timeout: 30_000 });
     // O registro de push nativo não é iniciado automaticamente ao criar um perfil.
     // Isso evita encerrar a APK quando serviços Google ainda não estiverem disponíveis no aparelho.
@@ -926,7 +927,7 @@ export default function Home() {
 	    const next: LocalProfile = { id, accountUid: account?.uid, username: account?.username, authToken: account?.idToken, accountType: account ? "official" : "guest", connectionCode: account ? stableConnectionCode(account.uid) : createConnectionCode(), displayName, bio: String(data.get("bio") || "").trim(), avatarUrl, encryptionPublicKey };
 	    const guestIdBeingMigrated = account && store.profile?.accountType === "guest" ? store.profile.id : null;
 	    const rememberedAccount = account ? readAccountVault().find(record => record.id === account?.uid || record.accountUid === account?.uid || record.username === account?.username) : undefined;
-		    const rememberedStore = remoteStore || (rememberedAccount ? accountStoreForSwitch(rememberedAccount) : store);
+	    const rememberedStore = remoteStore || (rememberedAccount ? accountStoreForSwitch(rememberedAccount) : guestIdBeingMigrated ? store : createEmptyOrbitStore());
     const rememberedProfile = rememberedStore.profile;
     const persistedProfile = remoteStore?.profile || rememberedProfile;
     const restoredProfile = persistedProfile && account
@@ -1018,8 +1019,8 @@ export default function Home() {
 	    toast.success("Você saiu desta conta neste dispositivo.");
 	  };
 
-  const addContact = (code: string) => {
-    if (!socket?.connected) return;
+	  const addContact = (code: string) => {
+	    if (!socket?.connected) { toast.error("Conectando. Tente novamente em instantes."); return; }
     socket.emit("contact:add", { code }, (result: { ok: boolean; profile?: LocalProfile; pending?: boolean; message?: string }) => {
       if (!result.ok || !result.profile) { toast.error(result.message || "Não foi possível enviar a solicitação."); return; }
       toast.success(`Solicitação enviada para ${result.profile.displayName}.`);
@@ -1027,8 +1028,8 @@ export default function Home() {
     });
   };
 
-  const addContactByUsername = (username: string) => {
-    if (!socket?.connected) return;
+	  const addContactByUsername = (username: string) => {
+	    if (!socket?.connected) { toast.error("Conectando. Tente novamente em instantes."); return; }
     socket.emit("contact:add-username", { username }, (result: { ok: boolean; profile?: LocalProfile; message?: string }) => {
       if (!result.ok || !result.profile) { toast.error(result.message || "Nome de usuário não encontrado."); return; }
       toast.success(`Solicitação enviada para ${result.profile.displayName}.`);
@@ -1177,7 +1178,7 @@ export default function Home() {
 		    const nextAttachment = selectedDirectMedia || attachment;
 		    const nextBody = selectedDirectMedia ? null : compose.trim() || null;
 		    if (!profile || !activeRoom || (!nextBody && !nextAttachment)) return;
-		    if (!socket?.connected) return;
+		    if (!socket?.connected) { toast.error("Conectando. Tente enviar novamente em instantes."); return; }
 		    if (editingMessage) {
 		      if (selectedDirectMedia) { toast.error("Conclua ou cancele a edição antes de enviar uma mídia."); return; }
 		      if (editingMessage.author.id !== profile.id || editingMessage.deletedAt) return;
@@ -1215,8 +1216,8 @@ export default function Home() {
 	    const outbound: LocalMessage = { ...message, body: null, attachment: null, encrypted };
 	    updateStore(current => ({ ...current, messages: appendMessage(current.messages, message) }));
 	        const attachmentRetention = attachmentRetentionClass(message.attachment);
-	        if (activeRoom.kind === "dm" && activeRoom.partner) socket.emit("direct:message", { recipientId: activeRoom.partner.id, message: outbound, attachmentRetention });
-	        if (activeRoom.kind === "channel" && selectedGroup) socket.emit("group:message", { recipientIds: selectedGroup.members.map(member => member.id), groupId: selectedGroup.id, message: outbound, attachmentRetention });
+		        if (activeRoom.kind === "dm" && activeRoom.partner) socket.emit("direct:message", { recipientId: activeRoom.partner.id, message: outbound, attachmentRetention }, (result: { ok: boolean; message?: string }) => { if (!result?.ok) toast.error(result?.message || "Não foi possível enviar a mensagem."); });
+		        if (activeRoom.kind === "channel" && selectedGroup) socket.emit("group:message", { recipientIds: selectedGroup.members.map(member => member.id), groupId: selectedGroup.id, message: outbound, attachmentRetention }, (result: { ok: boolean; message?: string }) => { if (!result?.ok) toast.error(result?.message || "Não foi possível enviar a mensagem."); });
 		    setCompose("");
 		    if (!selectedDirectMedia) setAttachment(null);
 	    setReplyingTo(null);

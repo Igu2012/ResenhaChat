@@ -108,6 +108,16 @@ describe("writeOrbitStore", () => {
 	  expect(restored.profile?.authToken).toBeUndefined();
 	});
 
+	it("mantém a foto própria de cada conta ao trocar de perfil", () => {
+	  const first: OrbitStore = { profile: { id: "first", accountUid: "first", username: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "", avatarUrl: "data:image/png;base64,foto-ana", accountType: "official" }, contacts: [], groups: [], requests: [], messages: {} };
+	  const second: OrbitStore = { profile: { id: "second", accountUid: "second", username: "bia", connectionCode: "BIA123", displayName: "Bia", bio: "", avatarUrl: "data:image/png;base64,foto-bia", accountType: "official" }, contacts: [], groups: [], requests: [], messages: {} };
+	  saveAccountSnapshot(first);
+	  saveAccountSnapshot(second);
+
+	  const secondRecord = readAccountVault().find(account => account.id === "second")!;
+	  expect(accountStoreForSwitch(secondRecord).profile?.avatarUrl).toBe("data:image/png;base64,foto-bia");
+	});
+
 	it("preserva conversas e grupos ao transformar um perfil Guest em conta oficial", () => {
     const guest = { id: "guest", connectionCode: "ABC123", displayName: "Convidado", bio: "", avatarUrl: null, accountType: "guest" as const };
     const official = { id: "official", connectionCode: "ZXCV12", displayName: "Ana", bio: "", avatarUrl: null, accountType: "official" as const, username: "ana" };
