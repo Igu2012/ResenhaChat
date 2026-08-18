@@ -112,3 +112,7 @@
 - [x] Executar um novo reset autorizado de contas, dados e arquivos da Resenha antes do relançamento da sincronização completa.
 - [x] Impedir definitivamente o cadastro de nomes de usuário duplicados, inclusive diferenças apenas de maiúsculas e minúsculas.
 - [x] Confirmar por teste que um snapshot de conta é gravado no servidor e pode ser recuperado por outro dispositivo.
+- [x] Preservar e restaurar a foto de perfil da conta sem ser sobrescrita por dados vazios do aparelho.
+- [x] Manter o código de contato fixo para a mesma conta em todos os logins e dispositivos.
+- [x] Preservar e restaurar servidores, canais e membros da conta ao entrar em outro dispositivo.
+- [x] Aplicar o snapshot do Drive como base prioritária ao entrar, sem sobrescrever foto, código ou servidores com um perfil local novo.

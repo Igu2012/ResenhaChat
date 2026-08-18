@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decryptAccountSnapshot, encryptAccountSnapshot, mergeAccountStores } from "./accountDriveSync";
+import { decryptAccountSnapshot, encryptAccountSnapshot, mergeAccountStores, restoreAccountStore } from "./accountDriveSync";
 
 describe("cofre de conta no Drive", () => {
   it("cifra o snapshot com a senha antes de prepará-lo para sincronização", async () => {
@@ -48,5 +48,16 @@ describe("mergeAccountStores", () => {
     expect(restored.messages["dm:ana:bia"][0]).toMatchObject({ body: "Mensagem protegida", attachment: { name: "foto.png" } });
     expect(restored.requests[0].id).toBe("request-1");
     expect(restored.unreadRooms?.["dm:ana:bia"].count).toBe(1);
+  });
+
+  it("prioriza a foto, o código e o servidor do Drive ao restaurar uma conta", () => {
+    const remoteProfile = { id: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "", avatarUrl: "data:image/png;base64,remota" };
+    const localProfile = { ...remoteProfile, connectionCode: "LOCAL1", avatarUrl: null };
+    const remote = { profile: remoteProfile, contacts: [], requests: [], groups: [{ id: "server", name: "Servidor remoto", imageUrl: null, ownerId: "ana", members: [remoteProfile], channels: [] }], messages: {} };
+    const local = { profile: localProfile, contacts: [], requests: [], groups: [{ id: "server", name: "Servidor local", imageUrl: null, ownerId: "ana", members: [localProfile], channels: [] }], messages: {} };
+    const restored = restoreAccountStore(remote, local);
+
+    expect(restored.profile).toMatchObject({ connectionCode: "ANA123", avatarUrl: "data:image/png;base64,remota" });
+    expect(restored.groups[0].name).toBe("Servidor remoto");
   });
 });

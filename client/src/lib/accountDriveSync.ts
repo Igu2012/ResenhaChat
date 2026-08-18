@@ -53,6 +53,10 @@ export function mergeAccountStores(remote: OrbitStore, local: OrbitStore): Orbit
   };
 }
 
+export function restoreAccountStore(remote: OrbitStore, local: OrbitStore): OrbitStore {
+  return mergeAccountStores(local, remote);
+}
+
 type SyncReadResponse = { ok: boolean; revision?: number; snapshot?: EncryptedAccountSnapshot | null; message?: string };
 type SyncWriteResponse = SyncReadResponse & { conflict?: boolean };
 

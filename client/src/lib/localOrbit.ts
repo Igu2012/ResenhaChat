@@ -280,6 +280,21 @@ export function createConnectionCode() {
   return Array.from(values, value => alphabet[value % alphabet.length]).join("");
 }
 
+export function stableConnectionCode(accountId: string) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let value = 0x811c9dc5;
+  for (const character of accountId) {
+    value ^= character.codePointAt(0) || 0;
+    value = Math.imul(value, 0x01000193) >>> 0;
+  }
+  let code = "";
+  for (let index = 0; index < 6; index += 1) {
+    value = Math.imul(value ^ (index + 1), 1_103_515_245) >>> 0;
+    code += alphabet[value % alphabet.length];
+  }
+  return code;
+}
+
 export function directRoomId(firstId: string, secondId: string) {
   return `dm:${[firstId, secondId].sort().join(":")}`;
 }

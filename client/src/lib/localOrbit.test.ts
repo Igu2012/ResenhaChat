@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { accountStoreForSwitch, applyApprovedDataReset, applyOfficialSession, createEmptyOrbitStore, deleteMessagesByAuthor, directRoomId, migrateGuestToOfficial, readAccountVault, readOfficialRefreshToken, readOrbitStore, replaceProfileEverywhere, saveAccountSnapshot, writeOrbitStore, type OrbitStore } from "./localOrbit";
+import { accountStoreForSwitch, applyApprovedDataReset, applyOfficialSession, createEmptyOrbitStore, deleteMessagesByAuthor, directRoomId, migrateGuestToOfficial, readAccountVault, readOfficialRefreshToken, readOrbitStore, replaceProfileEverywhere, saveAccountSnapshot, stableConnectionCode, writeOrbitStore, type OrbitStore } from "./localOrbit";
 
 const STORAGE_KEY = "orbit-chat.local-store.v2";
 
@@ -163,5 +163,12 @@ describe("writeOrbitStore", () => {
     expect(restored.groups[0].channels[0].name).toBe("geral");
     expect(restored.requests[0].id).toBe("pedido");
     expect(restored.unreadRooms?.["dm:ana:bia"].mentions).toBe(1);
+  });
+});
+
+describe("código de conta", () => {
+  it("permanece estável para a mesma conta oficial", () => {
+    expect(stableConnectionCode("uid-da-conta")).toBe(stableConnectionCode("uid-da-conta"));
+    expect(stableConnectionCode("uid-da-conta")).toHaveLength(6);
   });
 });

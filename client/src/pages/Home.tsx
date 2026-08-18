@@ -10,6 +10,7 @@ import {
 	  appendMessage,
   channelRoomId,
 	  createConnectionCode,
+	  stableConnectionCode,
 	  createEmptyOrbitStore,
 	  createId,
 	  deleteMessagesByAuthor,
@@ -37,7 +38,7 @@ import {
 	  writeOrbitStore,
 	} from "@/lib/localOrbit";
 		import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, exportStoredKeyPair, isEncryptedMessage, restoreStoredKeyPair } from "@/lib/e2ee";
-		import { decryptAccountSnapshot, encryptAccountSnapshot, fetchAccountSnapshot, mergeAccountStores, saveAccountSnapshotToDrive } from "@/lib/accountDriveSync";
+		import { decryptAccountSnapshot, encryptAccountSnapshot, fetchAccountSnapshot, mergeAccountStores, restoreAccountStore, saveAccountSnapshotToDrive } from "@/lib/accountDriveSync";
 		import { addNativeBackButtonListener, checkForUpdate, exitNativeApp, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
 		import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
 		import { attachmentRetentionClass } from "@/lib/attachmentRetention";
@@ -267,8 +268,8 @@ export default function Home() {
     if (!currentProfile?.id) return;
     void readCachedProfileAvatar(currentProfile.id).then(avatarUrl => {
       if (!avatarUrl) return;
-      setStore(current => current.profile?.id === currentProfile.id && current.profile.avatarUrl !== avatarUrl
-        ? replaceProfileEverywhere(current, { ...current.profile, avatarUrl })
+	      setStore(current => current.profile?.id === currentProfile.id && !current.profile.avatarUrl
+	        ? replaceProfileEverywhere(current, { ...current.profile, avatarUrl })
         : current);
     });
   }, [store.profile?.id]);
@@ -914,11 +915,11 @@ export default function Home() {
 	      return;
 	    }
 	    if (account?.refreshToken) saveOfficialRefreshToken(account.uid, account.refreshToken);
-	    const next: LocalProfile = { id, accountUid: account?.uid, username: account?.username, authToken: account?.idToken, accountType: account ? "official" : "guest", connectionCode: createConnectionCode(), displayName, bio: String(data.get("bio") || "").trim(), avatarUrl, encryptionPublicKey };
+	    const next: LocalProfile = { id, accountUid: account?.uid, username: account?.username, authToken: account?.idToken, accountType: account ? "official" : "guest", connectionCode: account ? stableConnectionCode(account.uid) : createConnectionCode(), displayName, bio: String(data.get("bio") || "").trim(), avatarUrl, encryptionPublicKey };
 	    const guestIdBeingMigrated = account && store.profile?.accountType === "guest" ? store.profile.id : null;
 	    const rememberedAccount = account ? readAccountVault().find(record => record.id === account?.uid || record.accountUid === account?.uid || record.username === account?.username) : undefined;
 	    let rememberedStore = rememberedAccount ? accountStoreForSwitch(rememberedAccount) : store;
-	    if (remoteStore) rememberedStore = mergeAccountStores(remoteStore, rememberedStore);
+	    if (remoteStore) rememberedStore = restoreAccountStore(remoteStore, rememberedStore);
     const rememberedProfile = rememberedStore.profile;
     const persistedProfile = remoteStore?.profile || rememberedProfile;
     const restoredProfile = persistedProfile && account
@@ -973,7 +974,7 @@ export default function Home() {
 	        if (remoteSnapshot.snapshot) {
 	          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
 	          await restoreStoredKeyPair(result.uid, remote.keyPair);
-	          restoredStore = mergeAccountStores(remote.store, restoredStore);
+	          restoredStore = restoreAccountStore(remote.store, restoredStore);
 	        }
 	      } catch (error) {
 	        console.warn("Não foi possível restaurar a conta no Drive.", error);
