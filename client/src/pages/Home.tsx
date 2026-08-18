@@ -319,12 +319,14 @@ export default function Home() {
 	  const driveSyncPasswordRef = useRef<string | null>(null);
 	  const driveSyncRevisionRef = useRef(0);
 	  const driveSyncRunningRef = useRef(false);
+	  const storeRef = useRef<OrbitStore>(store);
   const contactIdsRef = useRef<string[]>(store.contacts.map(contact => contact.id));
   const syncContactPresenceRef = useRef<(() => void) | null>(null);
   const syncVoiceWatchRef = useRef<(() => void) | null>(null);
 	  const syncCallWatchRef = useRef<(() => void) | null>(null);
 	  const refreshingOfficialSessionRef = useRef<string | null>(null);
-  const call = useCall(socket);
+	  const call = useCall(socket);
+	  useEffect(() => { storeRef.current = store; }, [store]);
   const profile = store.profile;
   const selectedGroup = useMemo(() => store.groups.find(group => group.id === selectedGroupId) || null, [selectedGroupId, store.groups]);
   const activeMessages = activeRoom ? store.messages[activeRoom.id] || [] : [];
@@ -827,6 +829,13 @@ export default function Home() {
 	    return () => window.clearTimeout(timer);
 	  }, [store]);
 
+	  useEffect(() => {
+	    const account = store.profile;
+	    if (account?.accountType !== "official" || !account.authToken || !driveSyncPasswordRef.current) return;
+	    const retry = window.setInterval(() => { void syncOfficialStoreToDrive(storeRef.current); }, 20_000);
+	    return () => window.clearInterval(retry);
+	  }, [store.profile?.id, store.profile?.authToken]);
+
   const requestBrowserNotifications = async () => {
     if (isNativeRuntime()) {
       const granted = await requestNativeNotificationPermission();
@@ -932,6 +941,7 @@ export default function Home() {
 	    profileRef.current = restoredProfile;
 	    const saved = writeOrbitStore(nextStore);
 	    setStore(saved.store);
+	    if (account) void syncOfficialStoreToDrive(saved.store);
 	    setAccountVault(saveAccountSnapshot(saved.store));
 	    if (!account) {
 	      setActiveRoom(null);
@@ -968,7 +978,9 @@ export default function Home() {
 	      } catch (error) {
 	        console.warn("Não foi possível restaurar a conta no Drive.", error);
 	      }
-	      setStore(applyOfficialSession(restoredStore, result));
+	      const syncedStore = applyOfficialSession(restoredStore, result);
+	      setStore(syncedStore);
+	      void syncOfficialStoreToDrive(syncedStore);
 	    } else {
 	      setStore(accountStoreForSwitch(record));
 	    }

@@ -110,3 +110,5 @@
 - [x] Restaurar esse estado ao entrar na mesma conta em outro dispositivo, sem depender do cache anterior do aparelho.
 - [x] Cobrir a sincronização entre dois dispositivos com testes automatizados.
 - [x] Executar um novo reset autorizado de contas, dados e arquivos da Resenha antes do relançamento da sincronização completa.
+- [x] Impedir definitivamente o cadastro de nomes de usuário duplicados, inclusive diferenças apenas de maiúsculas e minúsculas.
+- [x] Confirmar por teste que um snapshot de conta é gravado no servidor e pode ser recuperado por outro dispositivo.
