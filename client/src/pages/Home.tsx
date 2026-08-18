@@ -324,8 +324,9 @@ export default function Home() {
   const contactIdsRef = useRef<string[]>(store.contacts.map(contact => contact.id));
   const syncContactPresenceRef = useRef<(() => void) | null>(null);
   const syncVoiceWatchRef = useRef<(() => void) | null>(null);
-	  const syncCallWatchRef = useRef<(() => void) | null>(null);
-	  const refreshingOfficialSessionRef = useRef<string | null>(null);
+		  const syncCallWatchRef = useRef<(() => void) | null>(null);
+		  const refreshingOfficialSessionRef = useRef<string | null>(null);
+		  const lastReconnectRefreshAtRef = useRef<Record<string, number>>({});
 	  const call = useCall(socket);
 	  useEffect(() => { storeRef.current = store; }, [store]);
   const profile = store.profile;
@@ -534,9 +535,29 @@ export default function Home() {
       }
     };
     const noteInteraction = () => noteActivity();
-    const retryAfterExhaustion = () => window.setTimeout(() => instance.connect(), 1200);
-    setSocket(instance);
-    instance.on("connect", () => { noteActivity(true); refreshPresence(); });
+	    const retryAfterExhaustion = () => window.setTimeout(() => instance.connect(), 1200);
+	    const refreshAfterConnectionError = () => {
+	      const currentProfile = profileRef.current;
+	      if (!currentProfile || currentProfile.accountType !== "official") return;
+	      const refreshToken = readOfficialRefreshToken(currentProfile.id);
+	      const now = Date.now();
+	      if (!refreshToken || refreshingOfficialSessionRef.current === currentProfile.id || now - (lastReconnectRefreshAtRef.current[currentProfile.id] || 0) < 10_000) return;
+	      lastReconnectRefreshAtRef.current[currentProfile.id] = now;
+	      refreshingOfficialSessionRef.current = currentProfile.id;
+	      void refreshOfficialAccount(runtimeApiUrl("/api/account/refresh"), refreshToken).then(account => {
+	        const latest = profileRef.current;
+	        if (!latest || latest.id !== currentProfile.id) return;
+	        const refreshedProfile = { ...latest, id: account.uid, accountUid: account.uid, authToken: account.idToken, username: account.username || latest.username, displayName: account.displayName || latest.displayName };
+	        instance.auth = { profile: refreshedProfile };
+	        setStore(current => current.profile?.id === currentProfile.id ? applyOfficialSession(current, account) : current);
+	        instance.connect();
+	      }).catch(() => undefined).finally(() => {
+	        if (refreshingOfficialSessionRef.current === currentProfile.id) refreshingOfficialSessionRef.current = null;
+	      });
+	    };
+	    setSocket(instance);
+	    instance.on("connect", () => { noteActivity(true); refreshPresence(); });
+	    instance.on("connect_error", refreshAfterConnectionError);
     instance.on("disconnect", reason => {
       if (reason === "io server disconnect") instance.connect();
     });
@@ -694,7 +715,8 @@ export default function Home() {
       window.removeEventListener("keydown", noteInteraction);
       window.removeEventListener("touchstart", noteInteraction);
       if (activityTimer) window.clearTimeout(activityTimer);
-      instance.io.off("reconnect_failed", retryAfterExhaustion);
+	      instance.io.off("reconnect_failed", retryAfterExhaustion);
+	      instance.off("connect_error", refreshAfterConnectionError);
       if (syncContactPresenceRef.current === syncContactPresence) syncContactPresenceRef.current = null;
       instance.disconnect();
       setSocket(null);

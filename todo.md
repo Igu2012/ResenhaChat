@@ -128,3 +128,5 @@
 - [x] Corrigir o envio de mensagens entre usuários.
 - [x] Corrigir a adição de contatos por código e nome de usuário.
 - [x] Corrigir o travamento que impede toques e cliques nos botões do aplicativo.
+- [x] Corrigir a reconexão automática que deixa o aplicativo preso em “Conectando”.
+- [x] Corrigir a reconexão compartilhada entre o site e o aplicativo.
