@@ -116,3 +116,6 @@
 - [x] Manter o código de contato fixo para a mesma conta em todos os logins e dispositivos.
 - [x] Preservar e restaurar servidores, canais e membros da conta ao entrar em outro dispositivo.
 - [x] Aplicar o snapshot do Drive como base prioritária ao entrar, sem sobrescrever foto, código ou servidores com um perfil local novo.
+- [x] Bloquear a entrada até que o snapshot remoto seja lido, decifrado e aplicado ou até que seja confirmado que não existe cópia remota.
+- [x] Exibir e registrar um erro claro se a cópia da conta não puder ser recuperada, sem substituir os dados remotos por um perfil novo.
+- [x] Corrigir a leitura e a aplicação da cópia de conta no APK Android para igualar o comportamento do navegador.

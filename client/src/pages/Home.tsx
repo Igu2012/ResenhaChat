@@ -38,7 +38,7 @@ import {
 	  writeOrbitStore,
 	} from "@/lib/localOrbit";
 		import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, exportStoredKeyPair, isEncryptedMessage, restoreStoredKeyPair } from "@/lib/e2ee";
-		import { decryptAccountSnapshot, encryptAccountSnapshot, fetchAccountSnapshot, mergeAccountStores, restoreAccountStore, saveAccountSnapshotToDrive } from "@/lib/accountDriveSync";
+		import { decryptAccountSnapshot, encryptAccountSnapshot, fetchAccountSnapshot, saveAccountSnapshotToDrive } from "@/lib/accountDriveSync";
 		import { addNativeBackButtonListener, checkForUpdate, exitNativeApp, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
 		import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
 		import { attachmentRetentionClass } from "@/lib/attachmentRetention";
@@ -256,7 +256,8 @@ export default function Home() {
 	  const [store, setStore] = useState<OrbitStore>(() => {
 	    const resetApplied = applyApprovedDataReset();
 	    if (resetApplied) void clearCachedProfileAvatars();
-	    return readOrbitStore();
+	    const remembered = readOrbitStore();
+	    return remembered.profile?.accountType === "official" && !remembered.profile.authToken ? createEmptyOrbitStore() : remembered;
 	  });
   const [socket, setSocket] = useState<Socket | null>(null);
   const [activeRoom, setActiveRoom] = useState<ActiveRoom | null>(null);
@@ -816,7 +817,7 @@ export default function Home() {
 	      if (!result.snapshot) return;
 	      const remote = await decryptAccountSnapshot(password, result.snapshot);
 	      await restoreStoredKeyPair(account.id, remote.keyPair);
-	      setStore(current => mergeAccountStores(remote.store, current));
+	      setStore(applyOfficialSession(remote.store, { uid: account.id, username: account.username, idToken: account.authToken }));
 	    } catch (error) {
 	      console.warn("Não foi possível sincronizar a conta no Drive.", error);
 	    } finally {
@@ -898,14 +899,16 @@ export default function Home() {
 	      try {
 	        const remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), account.uid, account.idToken);
 	        driveSyncRevisionRef.current = remoteSnapshot.revision;
-	        if (remoteSnapshot.snapshot) {
-	          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
-	          remoteStore = remote.store;
-	          await restoreStoredKeyPair(account.uid, remote.keyPair);
-	        }
-	      } catch (error) {
-	        console.warn("Não foi possível recuperar os dados da conta no Drive.", error);
-	      }
+		        if (remoteSnapshot.snapshot) {
+		          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
+		          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
+		          remoteStore = remote.store;
+		          await restoreStoredKeyPair(account.uid, remote.keyPair);
+		        }
+		      } catch (error) {
+		        console.warn("Não foi possível recuperar os dados da conta no Drive.", error);
+		        if (data.get("intent") === "login") { toast.error("Não foi possível abrir os dados protegidos desta conta. Confira a senha e tente novamente."); return; }
+		      }
 	    }
 	    let encryptionPublicKey: JsonWebKey;
 	    try {
@@ -918,8 +921,7 @@ export default function Home() {
 	    const next: LocalProfile = { id, accountUid: account?.uid, username: account?.username, authToken: account?.idToken, accountType: account ? "official" : "guest", connectionCode: account ? stableConnectionCode(account.uid) : createConnectionCode(), displayName, bio: String(data.get("bio") || "").trim(), avatarUrl, encryptionPublicKey };
 	    const guestIdBeingMigrated = account && store.profile?.accountType === "guest" ? store.profile.id : null;
 	    const rememberedAccount = account ? readAccountVault().find(record => record.id === account?.uid || record.accountUid === account?.uid || record.username === account?.username) : undefined;
-	    let rememberedStore = rememberedAccount ? accountStoreForSwitch(rememberedAccount) : store;
-	    if (remoteStore) rememberedStore = restoreAccountStore(remoteStore, rememberedStore);
+		    const rememberedStore = remoteStore || (rememberedAccount ? accountStoreForSwitch(rememberedAccount) : store);
     const rememberedProfile = rememberedStore.profile;
     const persistedProfile = remoteStore?.profile || rememberedProfile;
     const restoredProfile = persistedProfile && account
@@ -971,14 +973,17 @@ export default function Home() {
 	      try {
 	        const remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), result.uid, result.idToken);
 	        driveSyncRevisionRef.current = remoteSnapshot.revision;
-	        if (remoteSnapshot.snapshot) {
-	          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
-	          await restoreStoredKeyPair(result.uid, remote.keyPair);
-	          restoredStore = restoreAccountStore(remote.store, restoredStore);
-	        }
-	      } catch (error) {
-	        console.warn("Não foi possível restaurar a conta no Drive.", error);
-	      }
+		        if (remoteSnapshot.snapshot) {
+		          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
+		          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
+		          await restoreStoredKeyPair(result.uid, remote.keyPair);
+		          restoredStore = remote.store;
+		        }
+		      } catch (error) {
+		        console.warn("Não foi possível restaurar a conta no Drive.", error);
+		        toast.error("Não foi possível abrir os dados protegidos desta conta. Confira a senha e tente novamente.");
+		        return;
+		      }
 	      const syncedStore = applyOfficialSession(restoredStore, result);
 	      setStore(syncedStore);
 	      void syncOfficialStoreToDrive(syncedStore);
