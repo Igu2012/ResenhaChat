@@ -123,3 +123,4 @@
 - [x] Revisar textos visíveis para usar mensagens curtas, naturais e sem detalhes técnicos ou linguagem genérica.
 - [x] Corrigir a leitura da cópia de conta que falha tanto no site quanto no APK.
 - [x] Substituir o aviso de abertura por uma mensagem curta e natural.
+- [x] Impedir que a conta seja encerrada repetidamente no site e na APK.

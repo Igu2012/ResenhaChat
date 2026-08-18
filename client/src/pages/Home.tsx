@@ -256,8 +256,7 @@ export default function Home() {
 	  const [store, setStore] = useState<OrbitStore>(() => {
 	    const resetApplied = applyApprovedDataReset();
 	    if (resetApplied) void clearCachedProfileAvatars();
-	    const remembered = readOrbitStore();
-	    return remembered.profile?.accountType === "official" && !remembered.profile.authToken ? createEmptyOrbitStore() : remembered;
+	    return readOrbitStore();
 	  });
   const [socket, setSocket] = useState<Socket | null>(null);
   const [activeRoom, setActiveRoom] = useState<ActiveRoom | null>(null);

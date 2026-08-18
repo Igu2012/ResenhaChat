@@ -88,18 +88,27 @@ describe("writeOrbitStore", () => {
     expect(updated.messages["dm:ana:bia"][0].author.avatarUrl).toBe(refreshed.avatarUrl);
   });
 
-  it("salva múltiplas contas sem persistir tokens de autenticação", () => {
-    const guest: OrbitStore = { profile: { id: "guest", connectionCode: "ABC123", displayName: "Guest", bio: "", avatarUrl: null, accountType: "guest" }, contacts: [], groups: [], requests: [], messages: {} };
-    const official: OrbitStore = { profile: { id: "official", accountUid: "official", username: "ana", connectionCode: "ZXCV12", displayName: "Ana", bio: "", avatarUrl: null, accountType: "official", authToken: "token-que-nao-pode-ser-salvo" }, contacts: [], groups: [], requests: [], messages: {} };
+	it("salva múltiplas contas sem persistir tokens de autenticação", () => {
+	  const guest: OrbitStore = { profile: { id: "guest", connectionCode: "ABC123", displayName: "Guest", bio: "", avatarUrl: null, accountType: "guest" }, contacts: [], groups: [], requests: [], messages: {} };
+	  const official: OrbitStore = { profile: { id: "official", accountUid: "official", username: "ana", connectionCode: "ZXCV12", displayName: "Ana", bio: "", avatarUrl: null, accountType: "official", authToken: "token-que-nao-pode-ser-salvo" }, contacts: [], groups: [], requests: [], messages: {} };
     saveAccountSnapshot(guest);
     saveAccountSnapshot(official);
     const rawVault = localStorage.getItem("resenha-chat.account-vault.v1") || "";
     expect(rawVault).not.toContain("token-que-nao-pode-ser-salvo");
     expect(readAccountVault()).toHaveLength(2);
-    expect(readAccountVault().map(account => account.id)).toEqual(["guest", "official"]);
-  });
+	  expect(readAccountVault().map(account => account.id)).toEqual(["guest", "official"]);
+	});
 
-  it("preserva conversas e grupos ao transformar um perfil Guest em conta oficial", () => {
+	it("mantém a conta oficial salva ao reabrir, mesmo sem guardar o token temporário", () => {
+	  const official: OrbitStore = { profile: { id: "official", accountUid: "official", username: "ana", connectionCode: "ZXCV12", displayName: "Ana", bio: "", avatarUrl: null, accountType: "official", authToken: "token-que-nao-pode-ser-salvo" }, contacts: [], groups: [], requests: [], messages: {} };
+	  expect(writeOrbitStore(official).saved).toBe(true);
+
+	  const restored = readOrbitStore();
+	  expect(restored.profile).toMatchObject({ id: "official", accountType: "official", username: "ana" });
+	  expect(restored.profile?.authToken).toBeUndefined();
+	});
+
+	it("preserva conversas e grupos ao transformar um perfil Guest em conta oficial", () => {
     const guest = { id: "guest", connectionCode: "ABC123", displayName: "Convidado", bio: "", avatarUrl: null, accountType: "guest" as const };
     const official = { id: "official", connectionCode: "ZXCV12", displayName: "Ana", bio: "", avatarUrl: null, accountType: "official" as const, username: "ana" };
     const store: OrbitStore = { profile: guest, contacts: [], requests: [], groups: [{ id: "group", name: "Grupo", imageUrl: null, ownerId: "guest", members: [guest], channels: [] }], messages: { "dm:guest:friend": [{ id: "message", roomId: "dm:guest:friend", author: guest, body: "histórico", attachment: null, createdAt: "2026-08-16T00:00:00.000Z" }] } };
