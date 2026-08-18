@@ -127,3 +127,4 @@
 - [x] Separar corretamente a foto de perfil de cada conta no mesmo dispositivo.
 - [x] Corrigir o envio de mensagens entre usuários.
 - [x] Corrigir a adição de contatos por código e nome de usuário.
+- [x] Corrigir o travamento que impede toques e cliques nos botões do aplicativo.

@@ -228,7 +228,7 @@ function DismissiblePrompt({ active, className, children }: { active: boolean; c
     return () => window.clearTimeout(timeout);
   }, [active]);
   if (!active || !visible) return null;
-  return <aside role="status" className={`${className} touch-pan-y select-none`} style={{ transform: `translateX(${offsetX}px)`, opacity: Math.max(0.25, 1 - Math.abs(offsetX) / 260), transition: dragging ? "none" : "transform 180ms cubic-bezier(0.23, 1, 0.32, 1), opacity 180ms cubic-bezier(0.23, 1, 0.32, 1)" }} onPointerDown={event => { if (event.pointerType === "mouse" && event.button !== 0) return; startX.current = event.clientX; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (startX.current === null) return; const distance = event.clientX - startX.current; if (Math.abs(distance) > 6) setDragging(true); setOffsetX(distance); }} onPointerUp={() => { if (Math.abs(offsetX) >= 72) dismiss(); else { setOffsetX(0); setDragging(false); startX.current = null; } }} onPointerCancel={() => { setOffsetX(0); setDragging(false); startX.current = null; }}>{children}<IconButton label="Fechar aviso" onClick={dismiss} className="h-8 w-8 shrink-0"><X size={17} /></IconButton></aside>;
+  return <aside role="status" className={`${className} touch-pan-y select-none`} style={{ transform: `translateX(${offsetX}px)`, opacity: Math.max(0.25, 1 - Math.abs(offsetX) / 260), transition: dragging ? "none" : "transform 180ms cubic-bezier(0.23, 1, 0.32, 1), opacity 180ms cubic-bezier(0.23, 1, 0.32, 1)" }} onPointerDown={event => { if (event.pointerType === "mouse" && event.button !== 0) return; startX.current = event.clientX; }} onPointerMove={event => { if (startX.current === null) return; const distance = event.clientX - startX.current; if (Math.abs(distance) > 6) setDragging(true); setOffsetX(distance); }} onPointerUp={() => { if (Math.abs(offsetX) >= 72) dismiss(); else { setOffsetX(0); setDragging(false); startX.current = null; } }} onPointerCancel={() => { setOffsetX(0); setDragging(false); startX.current = null; }}>{children}<IconButton label="Fechar aviso" onClick={dismiss} className="h-8 w-8 shrink-0"><X size={17} /></IconButton></aside>;
 }
 
 function NotificationPermissionPrompt({ permission, onEnable }: { permission: NotificationPermission | "unsupported"; onEnable: () => void }) {
@@ -1536,7 +1536,6 @@ function Composer({ value, onChange, attachment, replyTo, editingMessage, onCanc
   const beginPressRecording = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0 || attachment || editingMessage || pressingRef.current) return;
     event.preventDefault();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
     pressingRef.current = true;
     shouldSendRef.current = false;
     pressStartedAtRef.current = Date.now();
