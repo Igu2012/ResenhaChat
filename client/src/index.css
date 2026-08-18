@@ -78,6 +78,11 @@ textarea {
   }
 }
 
+/* A lista vazia não deve sugerir que a outra conta precise ficar aberta. */
+p[class*="border-dashed"][class*="text-center"] {
+  display: none;
+}
+
 @keyframes orbit-enter {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }

@@ -102,3 +102,7 @@
 - [x] Reproduzir vídeos enviados diretamente na conversa, mantendo a tela ampliada como opção.
 - [x] Remover o campo de nome de exibição do cadastro e usar o nome de usuário no perfil inicial.
 - [x] Substituir textos genéricos do cadastro por uma explicação curta sobre a proteção das conversas.
+- [x] Resolver perfis por código ou nome de usuário mesmo quando estiverem off-line.
+- [x] Entregar solicitações de contato pendentes quando o destinatário voltar ao aplicativo.
+- [x] Remover o aviso que exige que a outra pessoa mantenha a Resenha aberta para adicionar contato.
+- [x] Exibir um controle claro para sair de canais de voz de servidores sem encerrar o aplicativo.
