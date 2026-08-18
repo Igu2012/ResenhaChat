@@ -20,6 +20,7 @@ export type LocalAttachment = {
   dataUrl: string | null;
   unavailableOffline?: boolean;
   recordedInApp?: boolean;
+  sentAsMessage?: "gif" | "sticker";
 };
 
 export type LocalReplyReference = {
@@ -80,6 +81,8 @@ export type OrbitStore = {
 const STORAGE_KEY = "orbit-chat.local-store.v2";
 const ACCOUNT_VAULT_KEY = "resenha-chat.account-vault.v1";
 const REFRESH_TOKEN_KEY = "resenha-chat.official-refresh-tokens.v1";
+const RESET_MARKER_KEY = "resenha-chat.data-reset-id";
+export const ACTIVE_DATA_RESET_ID = "2026-08-18-drive-account-reset-v1";
 const EMPTY_STORE: OrbitStore = { profile: null, contacts: [], groups: [], messages: {}, requests: [], unreadRooms: {} };
 
 export type LocalAccountRecord = {
@@ -180,6 +183,19 @@ export function accountStoreForSwitch(record: LocalAccountRecord): OrbitStore {
 
 export function createEmptyOrbitStore(): OrbitStore {
   return { profile: null, contacts: [], groups: [], messages: {}, requests: [], unreadRooms: {} };
+}
+
+export function applyApprovedDataReset(storage: Storage = localStorage) {
+  if (storage.getItem(RESET_MARKER_KEY) === ACTIVE_DATA_RESET_ID) return false;
+  storage.removeItem(STORAGE_KEY);
+  storage.removeItem(ACCOUNT_VAULT_KEY);
+  storage.removeItem(REFRESH_TOKEN_KEY);
+  for (let index = storage.length - 1; index >= 0; index -= 1) {
+    const key = storage.key(index);
+    if (key?.startsWith("resenha-chat.e2ee.keypair.")) storage.removeItem(key);
+  }
+  storage.setItem(RESET_MARKER_KEY, ACTIVE_DATA_RESET_ID);
+  return true;
 }
 
 export type OfficialSession = { uid: string; username?: string; displayName?: string; idToken?: string; refreshToken?: string };

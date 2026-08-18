@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCall } from "@/hooks/useCall";
 import {
 	  accountStoreForSwitch,
+	  applyApprovedDataReset,
 	  applyOfficialSession,
 	  appendMessage,
   channelRoomId,
@@ -18,6 +19,7 @@ import {
 	  readAccountVault,
 	  replaceProfileEverywhere,
 	  readOrbitStore,
+	  redactOrbitStore,
 	  removeAccountSnapshot,
 	  saveOfficialRefreshToken,
 	  saveAccountSnapshot,
@@ -34,12 +36,13 @@ import {
 	  voiceRoomId,
 	  writeOrbitStore,
 	} from "@/lib/localOrbit";
-	import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, isEncryptedMessage } from "@/lib/e2ee";
+		import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, exportStoredKeyPair, isEncryptedMessage, restoreStoredKeyPair } from "@/lib/e2ee";
+		import { decryptAccountSnapshot, encryptAccountSnapshot, fetchAccountSnapshot, mergeAccountStores, saveAccountSnapshotToDrive } from "@/lib/accountDriveSync";
 		import { addNativeBackButtonListener, checkForUpdate, exitNativeApp, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
 		import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
 		import { attachmentRetentionClass } from "@/lib/attachmentRetention";
 		import { AUDIO_PRE_RECORD_DELAY_MS, shouldSendHeldAudio } from "@/lib/audioRecording";
-		import { readCachedProfileAvatar, saveCachedProfileAvatar } from "@/lib/profileAvatarCache";
+		import { clearCachedProfileAvatars, readCachedProfileAvatar, saveCachedProfileAvatar } from "@/lib/profileAvatarCache";
 
 	import { acceptsAttachmentSize, MAX_ATTACHMENT_BYTES } from "../../../shared/attachmentLimits";
 	import { isValidPassword, isValidUsername, PASSWORD_HTML_PATTERN, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordRuleMessage, passwordsMatch, USERNAME_HTML_PATTERN, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, usernameRuleMessage } from "../../../shared/credentials";
@@ -249,7 +252,11 @@ function MobileGroupRail({ groups, selectedGroupId, onMessages, onSelectGroup, o
 }
 
 export default function Home() {
-  const [store, setStore] = useState<OrbitStore>(() => readOrbitStore());
+	  const [store, setStore] = useState<OrbitStore>(() => {
+	    const resetApplied = applyApprovedDataReset();
+	    if (resetApplied) void clearCachedProfileAvatars();
+	    return readOrbitStore();
+	  });
   const [socket, setSocket] = useState<Socket | null>(null);
   const [activeRoom, setActiveRoom] = useState<ActiveRoom | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
@@ -291,10 +298,11 @@ export default function Home() {
 		  const [mobileReleaseUrl, setMobileReleaseUrl] = useState<string | null>(null);
 		  const [iosReleaseUrl, setIosReleaseUrl] = useState<string | null>(null);
 		  const [showIosInstallHelp, setShowIosInstallHelp] = useState(false);
-  const [liveVoiceRooms, setLiveVoiceRooms] = useState<Record<string, boolean>>({});
-  const [voiceParticipants, setVoiceParticipants] = useState<Record<string, LocalProfile[]>>({});
-  const [observedCalls, setObservedCalls] = useState<Record<string, ObservedCall>>({});
-	  const [onlineContactIds, setOnlineContactIds] = useState<Set<string>>(() => new Set());
+	  const [liveVoiceRooms, setLiveVoiceRooms] = useState<Record<string, boolean>>({});
+	  const [voiceParticipants, setVoiceParticipants] = useState<Record<string, LocalProfile[]>>({});
+	  const [observedCalls, setObservedCalls] = useState<Record<string, ObservedCall>>({});
+	  const [typingProfileIds, setTypingProfileIds] = useState<Set<string>>(() => new Set());
+		  const [onlineContactIds, setOnlineContactIds] = useState<Set<string>>(() => new Set());
 	  const [awayContactIds, setAwayContactIds] = useState<Set<string>>(() => new Set());
 	  const [isAway, setIsAway] = useState(false);
 	  const [showRequests, setShowRequests] = useState(false);
@@ -304,8 +312,13 @@ export default function Home() {
 	  const [accountVault, setAccountVault] = useState<LocalAccountRecord[]>(() => readAccountVault());
 	  const [upgradingGuest, setUpgradingGuest] = useState(false);
 	  const [unreadRooms, setUnreadRooms] = useState<Record<string, { count: number; mentions: number }>>(() => store.unreadRooms || {});
-  const profileRef = useRef<LocalProfile | null>(store.profile);
-	  const activeRoomRef = useRef<ActiveRoom | null>(activeRoom);
+	  const profileRef = useRef<LocalProfile | null>(store.profile);
+		  const activeRoomRef = useRef<ActiveRoom | null>(activeRoom);
+	  const typingTimeoutsRef = useRef(new Map<string, number>());
+	  const typingWasSentRef = useRef(false);
+	  const driveSyncPasswordRef = useRef<string | null>(null);
+	  const driveSyncRevisionRef = useRef(0);
+	  const driveSyncRunningRef = useRef(false);
   const contactIdsRef = useRef<string[]>(store.contacts.map(contact => contact.id));
   const syncContactPresenceRef = useRef<(() => void) | null>(null);
   const syncVoiceWatchRef = useRef<(() => void) | null>(null);
@@ -377,6 +390,25 @@ export default function Home() {
 	      return rest;
 	    });
 	  }, [activeRoom]);
+
+	  useEffect(() => {
+	    const partnerId = activeRoom?.partner?.id;
+	    if (!partnerId || !socket?.connected) return;
+	    if (!compose.trim()) {
+	      if (typingWasSentRef.current) socket.emit("direct:typing", { recipientId: partnerId, typing: false });
+	      typingWasSentRef.current = false;
+	      return;
+	    }
+	    if (!typingWasSentRef.current) {
+	      socket.emit("direct:typing", { recipientId: partnerId, typing: true });
+	      typingWasSentRef.current = true;
+	    }
+	    const timer = window.setTimeout(() => {
+	      socket.emit("direct:typing", { recipientId: partnerId, typing: false });
+	      typingWasSentRef.current = false;
+	    }, 1_600);
+	    return () => window.clearTimeout(timer);
+	  }, [activeRoom?.partner?.id, compose, socket]);
 
 	  useEffect(() => {
 	    let removeListener: (() => void) | undefined;
@@ -617,7 +649,22 @@ export default function Home() {
 	      });
 	    });
 	    instance.on("group:message", ({ sender, message }: { sender: LocalProfile; message: LocalMessage }) => { void receiveMessage(sender, message); });
-    instance.on("offline:recovered", ({ count }: { count: number }) => toast.success(`${count} mensagem(ns) recebida(s) enquanto você estava offline.`));
+	    instance.on("direct:typing", ({ profileId, typing }: { profileId: string; typing: boolean }) => {
+	      if (!profileId || profileId === profileRef.current?.id) return;
+	      const existingTimeout = typingTimeoutsRef.current.get(profileId);
+	      if (existingTimeout) window.clearTimeout(existingTimeout);
+	      if (!typing) {
+	        typingTimeoutsRef.current.delete(profileId);
+	        setTypingProfileIds(current => { const next = new Set(current); next.delete(profileId); return next; });
+	        return;
+	      }
+	      setTypingProfileIds(current => new Set(current).add(profileId));
+	      typingTimeoutsRef.current.set(profileId, window.setTimeout(() => {
+	        typingTimeoutsRef.current.delete(profileId);
+	        setTypingProfileIds(current => { const next = new Set(current); next.delete(profileId); return next; });
+	      }, 2_200));
+	    });
+	    instance.on("offline:recovered", () => undefined);
     instance.on("call:group-live", ({ room, sharingScreen }: { room: string; sharingScreen: boolean }) => {
       if (typeof room === "string" && typeof sharingScreen === "boolean") setLiveVoiceRooms(current => ({ ...current, [room]: sharingScreen }));
     });
@@ -748,7 +795,37 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
-  const updateStore = (updater: (current: OrbitStore) => OrbitStore) => setStore(updater);
+	  const updateStore = (updater: (current: OrbitStore) => OrbitStore) => setStore(updater);
+
+	  const syncOfficialStoreToDrive = async (candidate: OrbitStore) => {
+	    const account = candidate.profile;
+	    const password = driveSyncPasswordRef.current;
+	    if (!account || account.accountType !== "official" || !account.authToken || !password || driveSyncRunningRef.current) return;
+	    driveSyncRunningRef.current = true;
+	    try {
+	      const snapshot = await encryptAccountSnapshot(password, { store: redactOrbitStore(candidate), keyPair: exportStoredKeyPair(account.id) });
+	      const result = await saveAccountSnapshotToDrive(runtimeApiUrl("/api/account/sync"), account.id, account.authToken, driveSyncRevisionRef.current, snapshot);
+	      if (!result.conflict) {
+	        driveSyncRevisionRef.current = result.revision;
+	        return;
+	      }
+	      driveSyncRevisionRef.current = result.revision;
+	      if (!result.snapshot) return;
+	      const remote = await decryptAccountSnapshot(password, result.snapshot);
+	      await restoreStoredKeyPair(account.id, remote.keyPair);
+	      setStore(current => mergeAccountStores(remote.store, current));
+	    } catch (error) {
+	      console.warn("Não foi possível sincronizar a conta no Drive.", error);
+	    } finally {
+	      driveSyncRunningRef.current = false;
+	    }
+	  };
+
+	  useEffect(() => {
+	    if (store.profile?.accountType !== "official" || !driveSyncPasswordRef.current) return;
+	    const timer = window.setTimeout(() => { void syncOfficialStoreToDrive(store); }, 900);
+	    return () => window.clearTimeout(timer);
+	  }, [store]);
 
   const requestBrowserNotifications = async () => {
     if (isNativeRuntime()) {
@@ -775,8 +852,7 @@ export default function Home() {
 	  const createProfile = async (event: React.FormEvent<HTMLFormElement>) => {
 	    event.preventDefault();
 	    const data = new FormData(event.currentTarget);
-	    const mode = String(data.get("mode") || "guest");
-	    if (upgradingGuest && mode !== "official") { toast.error("Escolha uma conta oficial para concluir a migração."); return; }
+		    const mode = "official";
 	    const username = String(data.get("username") || "").trim();
 	    const password = String(data.get("password") || "");
 	    const passwordConfirmation = String(data.get("passwordConfirmation") || "");
@@ -806,6 +882,21 @@ export default function Home() {
       return;
     }
 	    const id = account?.uid || createId();
+	    let remoteStore: OrbitStore | null = null;
+	    if (account?.idToken) {
+	      driveSyncPasswordRef.current = password;
+	      try {
+	        const remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), account.uid, account.idToken);
+	        driveSyncRevisionRef.current = remoteSnapshot.revision;
+	        if (remoteSnapshot.snapshot) {
+	          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
+	          remoteStore = remote.store;
+	          await restoreStoredKeyPair(account.uid, remote.keyPair);
+	        }
+	      } catch (error) {
+	        console.warn("Não foi possível recuperar os dados da conta no Drive.", error);
+	      }
+	    }
 	    let encryptionPublicKey: JsonWebKey;
 	    try {
 	      encryptionPublicKey = await ensureEncryptionPublicKey(id);
@@ -817,7 +908,8 @@ export default function Home() {
 	    const next: LocalProfile = { id, accountUid: account?.uid, username: account?.username, authToken: account?.idToken, accountType: account ? "official" : "guest", connectionCode: createConnectionCode(), displayName, bio: String(data.get("bio") || "").trim(), avatarUrl, encryptionPublicKey };
 	    const guestIdBeingMigrated = account && store.profile?.accountType === "guest" ? store.profile.id : null;
 	    const rememberedAccount = account ? readAccountVault().find(record => record.id === account?.uid || record.accountUid === account?.uid || record.username === account?.username) : undefined;
-	    const rememberedStore = rememberedAccount ? accountStoreForSwitch(rememberedAccount) : store;
+	    let rememberedStore = rememberedAccount ? accountStoreForSwitch(rememberedAccount) : store;
+	    if (remoteStore) rememberedStore = mergeAccountStores(remoteStore, rememberedStore);
 	    const rememberedProfile = rememberedStore.profile;
 	    const restoredProfile = rememberedProfile && account
 	      ? { ...next, avatarUrl: next.avatarUrl || rememberedProfile.avatarUrl, bio: next.bio || rememberedProfile.bio, displayName: rememberedProfile.displayName || next.displayName, encryptionPublicKey: next.encryptionPublicKey || rememberedProfile.encryptionPublicKey }
@@ -892,11 +984,19 @@ export default function Home() {
   const resolveRequest = (request: LocalRequest, accepted: boolean) => {
     if (!socket || !profile) return;
     socket.emit("contact:resolve", { request, accepted });
+    if (accepted && request.kind === "group" && request.group) {
+      const joiningGroup: LocalGroup = { ...request.group, members: [...request.group.members.filter(member => member.id !== profile.id), profile] };
+      socket.emit("group:join", { group: joiningGroup }, (result: { ok: boolean; group?: LocalGroup; message?: string }) => {
+        if (!result.ok || !result.group) return toast.error(result.message || "Não foi possível entrar no servidor.");
+        setStore(current => ({ ...current, groups: current.groups.some(group => group.id === result.group!.id) ? current.groups.map(group => group.id === result.group!.id ? result.group! : group) : [...current.groups, result.group!] }));
+      });
+    }
     updateStore(current => {
       if (!accepted) return { ...current, requests: current.requests.filter(item => item.id !== request.id) };
       if (request.kind === "contact") return { ...current, contacts: upsertContact(current.contacts, request.from), requests: current.requests.filter(item => item.id !== request.id) };
       if (!request.group) return { ...current, requests: current.requests.filter(item => item.id !== request.id) };
-      return { ...current, groups: current.groups.some(group => group.id === request.group!.id) ? current.groups : [...current.groups, request.group!], requests: current.requests.filter(item => item.id !== request.id) };
+      const groupWithMember: LocalGroup = { ...request.group, members: [...request.group.members.filter(member => member.id !== profile.id), profile] };
+      return { ...current, groups: current.groups.some(group => group.id === groupWithMember.id) ? current.groups.map(group => group.id === groupWithMember.id ? groupWithMember : group) : [...current.groups, groupWithMember], requests: current.requests.filter(item => item.id !== request.id) };
     });
     toast.success(accepted ? "Solicitação aceita." : "Solicitação recusada.");
   };
@@ -1124,7 +1224,7 @@ export default function Home() {
 	    {sidebarOpen && <button aria-label="Fechar menu" className="fixed inset-0 z-20 bg-black/45 md:hidden" onClick={() => setSidebarOpen(false)} />}
 	    {isAway && <div role="status" className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full border border-amber-300/30 bg-[#24211a] px-3 py-2 text-xs font-semibold text-amber-100 shadow-xl"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" />Você está ausente. A Resenha reconecta quando voltar.</div>}
 	    <main className="mobile-chat-main flex min-h-0 min-w-0 flex-1 flex-col bg-[#1a1d28] pb-[calc(60px+env(safe-area-inset-bottom))] md:pb-0">{activeRoom ? <>
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/[.06] px-3 sm:h-16 sm:gap-3 sm:px-5"><button className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-white/[.07] md:hidden" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button><Hash size={22} className="hidden text-slate-500 sm:block" />{activeRoom.partner ? <button type="button" onClick={() => setViewedProfile(activeRoom.partner!)} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition hover:bg-white/[.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400" aria-label={`Ver perfil de ${activeRoom.partner.displayName}`}><ProfileAvatar profile={activeRoom.partner} className="h-8 w-8 shrink-0" /><span className="min-w-0"><h1 className="truncate text-sm font-bold">{activeRoom.title}</h1><p className="hidden text-xs text-slate-500 sm:block">Toque para ver o perfil</p></span></button> : <div className="min-w-0 flex-1"><h1 className="truncate text-sm font-bold">{activeRoom.title}</h1><p className="hidden text-xs text-slate-500 sm:block">Guardado localmente neste navegador</p></div>}{selectedGroup && <IconButton label="Ver membros do servidor" onClick={() => setShowMembers(true)}><Users size={18} /></IconButton>}{call.room ? <CallPresenceBadge call={call} currentProfile={profile} /> : observedCall?.participants.length ? <ObservedCallBadge activeCall={observedCall} /> : null}{activeRoom.partner && <><IconButton label="Chamada de áudio" onClick={() => void call.startCall(selectedRoomKey, callRecipients, false)} disabled={Boolean(call.room) || !callRecipients.length}><Phone size={18} /></IconButton><IconButton label="Chamada de vídeo" onClick={() => void call.startCall(selectedRoomKey, callRecipients, true)} disabled={Boolean(call.room) || !callRecipients.length}><Video size={18} /></IconButton></>}{activeRoom.kind === "channel" && <IconButton label="Convidar contatos" onClick={() => setShowInvite(true)}><UserPlus size={18} /></IconButton>}</header>
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-white/[.06] px-3 sm:h-16 sm:gap-3 sm:px-5"><button className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-white/[.07] md:hidden" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button><Hash size={22} className="hidden text-slate-500 sm:block" />{activeRoom.partner ? <button type="button" onClick={() => setViewedProfile(activeRoom.partner!)} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition hover:bg-white/[.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400" aria-label={`Ver perfil de ${activeRoom.partner.displayName}`}><ProfileAvatar profile={activeRoom.partner} className="h-8 w-8 shrink-0" /><span className="min-w-0"><h1 className="truncate text-sm font-bold">{activeRoom.title}</h1><p className={`hidden text-xs sm:block ${typingProfileIds.has(activeRoom.partner.id) ? "font-semibold text-emerald-300" : "text-slate-500"}`}>{typingProfileIds.has(activeRoom.partner.id) ? "digitando…" : "Toque para ver o perfil"}</p></span></button> : <div className="min-w-0 flex-1"><h1 className="truncate text-sm font-bold">{activeRoom.title}</h1><p className="hidden text-xs text-slate-500 sm:block">Conversa do servidor</p></div>}{selectedGroup && <IconButton label="Ver membros do servidor" onClick={() => setShowMembers(true)}><Users size={18} /></IconButton>}{call.room ? <CallPresenceBadge call={call} currentProfile={profile} /> : observedCall?.participants.length ? <ObservedCallBadge activeCall={observedCall} /> : null}{activeRoom.partner && <><IconButton label="Chamada de áudio" onClick={() => void call.startCall(selectedRoomKey, callRecipients, false)} disabled={Boolean(call.room) || !callRecipients.length}><Phone size={18} /></IconButton><IconButton label="Chamada de vídeo" onClick={() => void call.startCall(selectedRoomKey, callRecipients, true)} disabled={Boolean(call.room) || !callRecipients.length}><Video size={18} /></IconButton></>}{activeRoom.kind === "channel" && <IconButton label="Convidar contatos" onClick={() => setShowInvite(true)}><UserPlus size={18} /></IconButton>}</header>
       <div className="flex min-h-0 flex-1"><section className="flex min-h-0 min-w-0 flex-1 flex-col">{observedCall?.participants.length ? <ActiveCallCard activeCall={observedCall} joined={call.room === activeCallRoom} onRestore={call.restoreCall} onJoin={() => void call.startCall(selectedRoomKey, [], false, false, selectedGroup?.members.filter(member => member.id !== profile.id).map(member => member.id) || [])} /> : null}<Messages list={activeMessages} currentUser={profile.id} serverOwnerId={selectedGroup?.ownerId} onProfile={setViewedProfile} onReact={reactToMessage} onDelete={deleteMessage} onEdit={editMessage} onReply={setReplyingTo} onMarkUnread={markMessageUnread} onPin={pinMessage} onResolveInvite={resolveInviteMessage} /><Composer value={compose} onChange={setCompose} attachment={attachment} replyTo={replyingTo} editingMessage={editingMessage} onCancelReply={() => setReplyingTo(null)} onCancelEdit={() => { setEditingMessage(null); setCompose(""); setAttachment(null); }} onRemoveAttachment={() => setAttachment(null)} onAttach={async file => { try { if (file) setAttachment(await fileAsAttachment(file)); } catch (error) { toast.error(error instanceof Error ? error.message : "Arquivo inválido."); } }} onSendMedia={media => { void sendMessage(media); }} onInsertEmoji={emoji => setCompose(current => `${current}${emoji}`)} onSend={sendMessage} room={activeRoom.title} /></section>{selectedGroup && <aside className="hidden w-[225px] border-l border-white/[.06] bg-[#141720] p-4 xl:block"><p className="mb-3 text-[11px] font-bold uppercase tracking-[.14em] text-slate-500">Membros — {selectedGroup.members.length}</p>{selectedGroup.members.map(member => { const serverProfile = selectedGroup.memberProfiles?.[member.id] || {}; const label = serverProfile.displayName || member.displayName; const canManage = selectedGroup.ownerId === profile.id || (selectedGroup.admins || []).includes(profile.id); return <div key={member.id} className="mb-2 flex items-center gap-1 rounded-lg p-1 hover:bg-white/[.05]"><button type="button" onClick={() => setViewedProfile(member)} className="flex min-w-0 flex-1 items-center gap-2 text-left"><ProfileAvatar profile={member} className="h-8 w-8" /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold text-slate-300">{label}</span>{serverProfile.tag && <span style={{ color: serverProfile.tagColor || "#a78bfa" }} className="block truncate text-[10px]">{serverProfile.tag} · {serverProfile.role === "owner" ? "owner" : serverProfile.role === "admin" ? "admin" : "membro"}</span>}</span></button>{canManage && member.id !== profile.id && <button type="button" onClick={() => setManagedMember(member)} className="rounded-md px-1.5 py-1 text-[9px] font-bold text-violet-300 hover:bg-violet-500/20" title="Gerenciar membro">{serverProfile.role === "admin" ? "Admin" : "Gerir"}</button>}</div>; })}</aside>}</div>
     </> : <Welcome profile={profile} onMenu={() => setSidebarOpen(true)} onAdd={() => setShowContact(true)} onGroup={() => setShowGroup(true)} />}</main>
     <MobileGroupRail groups={store.groups} selectedGroupId={selectedGroupId} onMessages={() => { setSelectedGroupId(null); setActiveRoom(null); setSidebarOpen(true); }} onSelectGroup={openGroupFromMobileRail} onCreateGroup={() => setShowGroup(true)} onSettings={() => setShowProfile(true)} />
@@ -1149,6 +1249,7 @@ export default function Home() {
 }
 
 function SimplifiedEntryPanel({ onSubmit }: { onSubmit: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void> }) {
+  return <OfficialOnlyEntryPanel onSubmit={onSubmit} />;
   const [mode, setMode] = useState<"guest" | "official">("official");
   const [intent, setIntent] = useState<"register" | "login">("register");
   const [showPassword, setShowPassword] = useState(false);
@@ -1159,6 +1260,13 @@ function SimplifiedEntryPanel({ onSubmit }: { onSubmit: (event: React.FormEvent<
   const login = () => { setMode("official"); setIntent("login"); };
 
   return <main className="grid min-h-dvh place-items-center overflow-hidden bg-[#10121a] px-4"><div className="absolute -left-24 -top-28 h-80 w-80 rounded-full bg-violet-600/25 blur-3xl" /><form onSubmit={event => { void onSubmit(event); }} className="orbit-enter relative w-full max-w-[470px] rounded-[28px] border border-white/[.09] bg-[#1c1f2c]/90 p-8 shadow-2xl"><div className="flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#78b43d] text-lg font-black">R</div><div><p className="font-bold text-white">Resenha Chat</p><p className="text-xs text-slate-400">Conversa privada e simples</p></div></div>{mode === "official" ? <><h1 className="mt-8 text-2xl font-bold text-white">{intent === "register" ? "Crie sua conta." : "Entre na sua conta."}</h1><p className="mt-2 text-sm leading-6 text-slate-400">{intent === "register" ? "Escolha um nome de usuário e uma senha para acessar a Resenha em qualquer dispositivo." : "Use os dados salvos no seu gerenciador de senhas, se houver."}</p><input type="hidden" name="mode" value="official" /><input type="hidden" name="intent" value={intent} /><label className="mt-6 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Nome de usuário<Input name="username" required minLength={USERNAME_MIN_LENGTH} maxLength={USERNAME_MAX_LENGTH} pattern={USERNAME_HTML_PATTERN} autoComplete="username" className="mt-2 h-11 border-white/[.09] bg-[#11131d] text-white" placeholder="Escolha um nome de usuário" /></label><label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Senha{field()}</label>{intent === "register" && <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Repita a senha{field(true)}</label>}<Button className="mt-6 h-11 w-full rounded-xl bg-violet-500 font-bold hover:bg-violet-400">{intent === "login" ? "Entrar" : "Criar conta"}</Button><div className="mt-5 border-t border-white/[.08] pt-4 text-center text-xs text-slate-500">{intent === "register" ? <>Já tem uma conta? <button type="button" onClick={login} className="font-bold text-violet-300 hover:text-violet-200">Entrar</button></> : <>Ainda não tem conta? <button type="button" onClick={register} className="font-bold text-violet-300 hover:text-violet-200">Criar conta</button></>}<span className="mx-2 text-slate-700">·</span><button type="button" onClick={() => setMode("guest")} className="font-bold text-slate-300 hover:text-white">Se juntar como um Guest</button></div></> : <><h1 className="mt-8 text-2xl font-bold text-white">Se juntar como um Guest.</h1><p className="mt-2 text-sm leading-6 text-slate-400">Crie uma identidade local para começar agora.</p><input type="hidden" name="mode" value="guest" /><div className="mt-5 flex items-center gap-4 rounded-2xl border border-white/[.08] bg-white/[.025] p-3"><ProfileAvatar profile={{ displayName: "Sua foto", avatarUrl: avatarPreview }} className="h-16 w-16 rounded-2xl" /><label className="cursor-pointer rounded-xl bg-white/[.08] px-3 py-2 text-xs font-bold text-slate-200 transition hover:bg-white/[.13]"><input name="avatar" type="file" accept="image/*" className="hidden" onChange={event => { const file = event.target.files?.[0]; setAvatarPreview(file ? URL.createObjectURL(file) : null); }} />Adicionar foto</label></div><label className="mt-6 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Nome de exibição<Input name="name" required minLength={2} maxLength={64} className="mt-2 h-11 border-white/[.09] bg-[#11131d] text-white" placeholder="Como as pessoas vão te chamar?" /></label><label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Descrição <span className="normal-case font-normal text-slate-600">(opcional)</span><Textarea name="bio" maxLength={280} className="mt-2 min-h-24 resize-none border-white/[.09] bg-[#11131d] text-white" placeholder="Conte brevemente quem você é." /></label><Button className="mt-6 h-11 w-full rounded-xl bg-violet-500 font-bold hover:bg-violet-400">Continuar</Button><div className="mt-5 border-t border-white/[.08] pt-4 text-center text-xs text-slate-500">Prefere usar um nome de usuário? <button type="button" onClick={register} className="font-bold text-violet-300 hover:text-violet-200">Criar conta</button><span className="mx-2 text-slate-700">·</span><button type="button" onClick={login} className="font-bold text-slate-300 hover:text-white">Já tenho conta</button></div></>}</form></main>;
+}
+
+function OfficialOnlyEntryPanel({ onSubmit }: { onSubmit: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void> }) {
+  const [intent, setIntent] = useState<"register" | "login">("register");
+  const [showPassword, setShowPassword] = useState(false);
+  const passwordField = (confirmation = false) => <div className="relative mt-2"><Input name={confirmation ? "passwordConfirmation" : "password"} type={showPassword ? "text" : "password"} required minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} pattern={PASSWORD_HTML_PATTERN} autoComplete={intent === "login" ? "current-password" : "new-password"} className="h-11 border-white/[.09] bg-[#11131d] pr-11 text-white" placeholder={confirmation ? "Repita sua senha" : "Senha"} /><button type="button" onClick={() => setShowPassword(value => !value)} className="absolute inset-y-0 right-0 grid w-11 place-items-center text-slate-400 hover:text-white" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>;
+  return <main className="grid min-h-dvh place-items-center overflow-hidden bg-[#10121a] px-4"><div className="absolute -left-24 -top-28 h-80 w-80 rounded-full bg-violet-600/25 blur-3xl" /><form onSubmit={event => { void onSubmit(event); }} className="orbit-enter relative w-full max-w-[470px] rounded-[28px] border border-white/[.09] bg-[#1c1f2c]/90 p-8 shadow-2xl"><div className="flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#78b43d] text-lg font-black">R</div><div><p className="font-bold text-white">Resenha Chat</p><p className="text-xs text-slate-400">Converse na mesma conta em qualquer dispositivo</p></div></div><h1 className="mt-8 text-2xl font-bold text-white">{intent === "register" ? "Crie sua conta." : "Entre na sua conta."}</h1><p className="mt-2 text-sm leading-6 text-slate-400">{intent === "register" ? "Escolha um nome de usuário e uma senha para começar." : "Use o nome de usuário e a senha da sua conta."}</p><input type="hidden" name="mode" value="official" /><input type="hidden" name="intent" value={intent} /><label className="mt-6 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Nome de usuário<Input name="username" required minLength={USERNAME_MIN_LENGTH} maxLength={USERNAME_MAX_LENGTH} pattern={USERNAME_HTML_PATTERN} autoComplete="username" className="mt-2 h-11 border-white/[.09] bg-[#11131d] text-white" placeholder="Escolha um nome de usuário" /></label>{intent === "register" && <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Nome de exibição<Input name="name" minLength={2} maxLength={64} className="mt-2 h-11 border-white/[.09] bg-[#11131d] text-white" placeholder="Como as pessoas vão te chamar?" /></label>}<label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Senha{passwordField()}</label>{intent === "register" && <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Repita a senha{passwordField(true)}</label>}<Button className="mt-6 h-11 w-full rounded-xl bg-violet-500 font-bold hover:bg-violet-400">{intent === "login" ? "Entrar" : "Criar conta"}</Button><div className="mt-5 border-t border-white/[.08] pt-4 text-center text-xs text-slate-500">{intent === "register" ? <>Já tem uma conta? <button type="button" onClick={() => setIntent("login")} className="font-bold text-violet-300 hover:text-violet-200">Entrar</button></> : <>Ainda não tem conta? <button type="button" onClick={() => setIntent("register")} className="font-bold text-violet-300 hover:text-violet-200">Criar conta</button></>}</div></form></main>;
 }
 
 function EntryPanel({ onSubmit }: { onSubmit: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void> }) {
@@ -1235,9 +1343,9 @@ function AttachmentView({ attachment }: { attachment: LocalAttachment }) {
   if (attachment.mimeType.startsWith("audio/") && attachment.recordedInApp) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio controls src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /></div>;
   const open = () => { setZoom(1); setExpanded(true); };
   const viewer = expanded && <div className="fixed inset-0 z-[70] flex flex-col bg-black/95 p-4" role="dialog" aria-label={`Visualizar ${attachment.name}`}><header className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-sm font-semibold text-white">{attachment.name}</p><div className="flex items-center gap-2">{isImage && <Button type="button" onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} variant="outline" className="border-white/20 text-white"><Maximize2 size={16} />{Math.round(zoom * 100)}%</Button>}<a href={attachment.dataUrl} download={attachment.name} className="grid h-9 w-9 place-items-center rounded-lg text-slate-200 hover:bg-white/10" aria-label="Baixar"><Download size={18} /></a><IconButton label="Fechar visualização" onClick={() => setExpanded(false)}><X size={19} /></IconButton></div></header><div className="mt-4 flex min-h-0 flex-1 items-center justify-center overflow-auto">{isImage ? <img src={attachment.dataUrl} alt={attachment.name} onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} className="max-h-full max-w-full cursor-zoom-in rounded-xl object-contain transition-transform duration-200" style={{ transform: `scale(${zoom})` }} /> : <video controls autoPlay src={attachment.dataUrl} className="max-h-full max-w-full rounded-xl" />}</div></div>;
-  if (isImage) return <><button type="button" onClick={open} className="mt-2 block max-w-md overflow-hidden rounded-xl border border-white/[.08] text-left"><img src={attachment.dataUrl} alt={attachment.name} className="max-h-80 w-full object-cover" /><span className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400"><Maximize2 size={14} />{attachment.name}</span></button>{viewer}</>;
+  if (isImage) return <><button type="button" onClick={open} className="mt-2 block max-w-md overflow-hidden rounded-xl border border-white/[.08] text-left"><img src={attachment.dataUrl} alt={attachment.sentAsMessage ? "Mídia enviada" : attachment.name} className="max-h-80 w-full object-cover" />{!attachment.sentAsMessage && <span className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400"><Maximize2 size={14} />{attachment.name}</span>}</button>{viewer}</>;
   if (attachment.mimeType.startsWith("audio/")) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio controls src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /><a href={attachment.dataUrl} download={attachment.name} className="text-[10px] font-semibold text-violet-300">Baixar</a></div>;
-  if (isVideo) return <><button type="button" onClick={open} className="mt-2 max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-white/[.04] text-left"><video muted preload="metadata" src={attachment.dataUrl} className="max-h-80 w-full" /><div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400"><Maximize2 size={14} /><span className="truncate">{attachment.name}</span></div></button>{viewer}</>;
+  if (isVideo) return <div className="mt-2 max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black"><video controls playsInline preload="metadata" src={attachment.dataUrl} className="max-h-80 w-full" />{!attachment.sentAsMessage && <div className="flex items-center gap-2 bg-white/[.04] px-3 py-2 text-xs text-slate-400"><FileIcon size={14} /><span className="truncate">{attachment.name}</span></div>}</div>;
   return <a href={attachment.dataUrl} download={attachment.name} className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><FileIcon size={18} /></span><span className="min-w-0"><span className="block truncate text-xs font-bold">{attachment.name}</span><span className="text-[10px] text-slate-500">{attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : "GIF"} · Baixar</span></span></a>;
 }
 
@@ -1569,9 +1677,9 @@ function MediaPanel({ onSelect, onEmoji, onClose }: { onSelect: (attachment: Loc
     } catch { setResults([]); setUnavailable(true); } finally { setLoading(false); }
   };
   useEffect(() => { if (tab !== "emoji") void load(); }, [tab]);
-  const selectMedia = (item: typeof results[number]) => { onSelect({ name: `${item.title || label}.${item.mimeType.includes("sticker") ? "webp" : "gif"}`, mimeType: item.mimeType || "image/gif", size: 0, dataUrl: item.mediaUrl }); onClose(); };
+  const selectMedia = (item: typeof results[number]) => { onSelect({ name: `${item.title || label}.${tab === "s" ? "webp" : "gif"}`, mimeType: item.mimeType || "image/gif", size: 0, dataUrl: item.mediaUrl, sentAsMessage: tab === "s" ? "sticker" : "gif" }); onClose(); };
 
-  return <><button aria-label="Fechar painel de mídia" type="button" onClick={onClose} className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[1px]" /><section role="dialog" aria-label="Emojis, GIFs e figurinhas" className="fixed inset-x-0 bottom-0 z-50 mx-auto max-h-[74dvh] max-w-3xl rounded-t-[28px] border border-white/[.1] bg-[#1d1f2b] px-4 pb-[calc(16px+env(safe-area-inset-bottom))] pt-2 shadow-[0_-20px_60px_rgba(0,0,0,.45)]"><div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-slate-500/70" /><div className="flex items-center justify-between"><h2 className="text-base font-bold text-white">{tab === "emoji" ? "Emoji" : label}</h2><IconButton label="Fechar" onClick={onClose} className="h-8 w-8"><X size={18} /></IconButton></div><div className="mt-3 grid grid-cols-3 rounded-xl bg-[#12141d] p-1"><button type="button" onClick={() => setTab("emoji")} className={`rounded-lg py-2 text-sm font-bold ${tab === "emoji" ? "bg-[#363945] text-white" : "text-slate-400"}`}>Emoji</button><button type="button" onClick={() => setTab("g")} className={`rounded-lg py-2 text-sm font-bold ${tab === "g" ? "bg-[#363945] text-white" : "text-slate-400"}`}>GIFs</button><button type="button" onClick={() => setTab("s")} className={`rounded-lg py-2 text-sm font-bold ${tab === "s" ? "bg-[#363945] text-white" : "text-slate-400"}`}>Figurinhas</button></div>{tab === "emoji" ? <><div className="mt-4 flex items-center gap-2 rounded-xl border border-white/[.08] bg-[#12141d] px-3 py-2 text-sm text-slate-500"><Smile size={18} />Escolha um emoji</div><p className="mt-4 text-sm font-bold text-slate-300">Populares</p><div className="mt-3 grid grid-cols-8 gap-2 sm:grid-cols-10">{emoji.map(value => <button type="button" key={value} onClick={() => { onEmoji(value); onClose(); }} className="grid aspect-square place-items-center rounded-xl text-2xl transition hover:bg-white/[.09]">{value}</button>)}</div></> : <><form onSubmit={event => { event.preventDefault(); void load(query.trim() || "popular"); }} className="mt-4 flex gap-2"><Input value={query} onChange={event => setQuery(event.target.value)} className="h-10 border-white/[.09] bg-[#12141d] text-white" placeholder={`Pesquisar ${label.toLowerCase()}`} /><Button type="submit" className="h-10 bg-violet-500 px-4">Buscar</Button></form>{loading ? <p className="py-8 text-center text-sm text-slate-400">Carregando…</p> : unavailable ? <p className="py-8 text-center text-sm text-slate-400">Não foi possível carregar agora. Tente novamente mais tarde.</p> : <div className="mt-3 grid max-h-[38dvh] grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">{results.map(item => <button type="button" key={item.id} onClick={() => selectMedia(item)} className="overflow-hidden rounded-xl border border-white/[.08] bg-white/[.04] hover:border-violet-400/70"><img src={item.previewUrl} alt={item.title} loading="lazy" className="aspect-square h-full w-full object-cover" /></button>)}</div>}<label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-white/[.15] px-3 py-2.5 text-xs font-bold text-slate-300 hover:border-violet-400 hover:text-white"><ImagePlus size={16} />Escolher da galeria<input type="file" accept="image/gif,image/webp,image/png,image/*" className="hidden" onChange={async event => { try { const file = event.target.files?.[0]; if (file) { onSelect(await fileAsAttachment(file)); onClose(); } } catch (error) { toast.error(error instanceof Error ? error.message : "Arquivo inválido."); } }} /></label></>}</section></>;
+  return <><button aria-label="Fechar painel de mídia" type="button" onClick={onClose} className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[1px]" /><section role="dialog" aria-label="Emojis, GIFs e figurinhas" className="fixed inset-x-0 bottom-0 z-50 mx-auto max-h-[74dvh] max-w-3xl rounded-t-[28px] border border-white/[.1] bg-[#1d1f2b] px-4 pb-[calc(16px+env(safe-area-inset-bottom))] pt-2 shadow-[0_-20px_60px_rgba(0,0,0,.45)]"><div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-slate-500/70" /><div className="flex items-center justify-between"><h2 className="text-base font-bold text-white">{tab === "emoji" ? "Emoji" : label}</h2><IconButton label="Fechar" onClick={onClose} className="h-8 w-8"><X size={18} /></IconButton></div><div className="mt-3 grid grid-cols-3 rounded-xl bg-[#12141d] p-1"><button type="button" onClick={() => setTab("emoji")} className={`rounded-lg py-2 text-sm font-bold ${tab === "emoji" ? "bg-[#363945] text-white" : "text-slate-400"}`}>Emoji</button><button type="button" onClick={() => setTab("g")} className={`rounded-lg py-2 text-sm font-bold ${tab === "g" ? "bg-[#363945] text-white" : "text-slate-400"}`}>GIFs</button><button type="button" onClick={() => setTab("s")} className={`rounded-lg py-2 text-sm font-bold ${tab === "s" ? "bg-[#363945] text-white" : "text-slate-400"}`}>Figurinhas</button></div>{tab === "emoji" ? <><div className="mt-4 flex items-center gap-2 rounded-xl border border-white/[.08] bg-[#12141d] px-3 py-2 text-sm text-slate-500"><Smile size={18} />Escolha um emoji</div><p className="mt-4 text-sm font-bold text-slate-300">Populares</p><div className="mt-3 grid grid-cols-8 gap-2 sm:grid-cols-10">{emoji.map(value => <button type="button" key={value} onClick={() => { onEmoji(value); onClose(); }} className="grid aspect-square place-items-center rounded-xl text-2xl transition hover:bg-white/[.09]">{value}</button>)}</div></> : <><form onSubmit={event => { event.preventDefault(); void load(query.trim() || "popular"); }} className="mt-4 flex gap-2"><Input value={query} onChange={event => setQuery(event.target.value)} className="h-10 border-white/[.09] bg-[#12141d] text-white" placeholder={`Pesquisar ${label.toLowerCase()}`} /><Button type="submit" className="h-10 bg-violet-500 px-4">Buscar</Button></form>{loading ? <p className="py-8 text-center text-sm text-slate-400">Carregando…</p> : unavailable ? <p className="py-8 text-center text-sm text-slate-400">Não foi possível carregar agora. Tente novamente mais tarde.</p> : <div className="mt-3 grid max-h-[38dvh] grid-cols-4 gap-2 overflow-y-auto sm:grid-cols-5">{results.map(item => <button type="button" key={item.id} onClick={() => selectMedia(item)} className="overflow-hidden rounded-xl border border-white/[.08] bg-white/[.04] hover:border-violet-400/70"><img src={item.previewUrl} alt={item.title} loading="lazy" decoding="async" fetchPriority="low" className="aspect-square h-full w-full object-cover" /></button>)}</div>}<label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-white/[.15] px-3 py-2.5 text-xs font-bold text-slate-300 hover:border-violet-400 hover:text-white"><ImagePlus size={16} />Escolher da galeria<input type="file" accept="image/gif,image/webp,image/png,image/*" className="hidden" onChange={async event => { try { const file = event.target.files?.[0]; if (file) { onSelect(await fileAsAttachment(file)); onClose(); } } catch (error) { toast.error(error instanceof Error ? error.message : "Arquivo inválido."); } }} /></label></>}</section></>;
 }
 
 function LegacyGifPicker({ onSelect, onClose }: { onSelect: (attachment: LocalAttachment) => void; onClose: () => void }) {

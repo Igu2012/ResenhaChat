@@ -43,3 +43,19 @@ export async function readCachedProfileAvatar(profileId: string): Promise<string
     return null;
   }
 }
+
+export async function clearCachedProfileAvatars() {
+  if (typeof indexedDB === "undefined") return;
+  try {
+    const database = await openDatabase();
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, "readwrite");
+      transaction.objectStore(STORE_NAME).clear();
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+  } catch {
+    // O reset principal continua válido mesmo se o cache de avatar já não estiver disponível.
+  }
+}

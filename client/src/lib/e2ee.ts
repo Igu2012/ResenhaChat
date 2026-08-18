@@ -21,7 +21,7 @@ export type ClearMessageContent = {
   replyTo?: LocalReplyReference;
 };
 
-type StoredKeyPair = { privateKey: JsonWebKey; publicKey: JsonWebKey };
+export type StoredKeyPair = { privateKey: JsonWebKey; publicKey: JsonWebKey };
 
 function bytesToBase64(bytes: Uint8Array) {
   let binary = "";
@@ -64,6 +64,24 @@ async function deviceKeyPair(profileId: string): Promise<CryptoKeyPair> {
 export async function ensureEncryptionPublicKey(profileId: string) {
   const pair = await deviceKeyPair(profileId);
   return crypto.subtle.exportKey("jwk", pair.publicKey);
+}
+
+export function exportStoredKeyPair(profileId: string): StoredKeyPair | null {
+  try {
+    const raw = localStorage.getItem(`${KEY_STORAGE_PREFIX}${profileId}`);
+    if (!raw) return null;
+    const stored = JSON.parse(raw) as StoredKeyPair;
+    if (!stored?.privateKey || !stored?.publicKey) return null;
+    return stored;
+  } catch {
+    return null;
+  }
+}
+
+export async function restoreStoredKeyPair(profileId: string, stored: StoredKeyPair | null | undefined) {
+  if (!stored?.privateKey || !stored?.publicKey) return;
+  await importStoredKeyPair(stored);
+  localStorage.setItem(`${KEY_STORAGE_PREFIX}${profileId}`, JSON.stringify(stored));
 }
 
 async function sharedCipher(profileId: string, peerPublicKey: JsonWebKey, usage: KeyUsage[]) {

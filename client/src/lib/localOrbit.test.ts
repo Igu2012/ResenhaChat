@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { accountStoreForSwitch, applyOfficialSession, createEmptyOrbitStore, deleteMessagesByAuthor, directRoomId, migrateGuestToOfficial, readAccountVault, readOfficialRefreshToken, readOrbitStore, replaceProfileEverywhere, saveAccountSnapshot, writeOrbitStore, type OrbitStore } from "./localOrbit";
+import { accountStoreForSwitch, applyApprovedDataReset, applyOfficialSession, createEmptyOrbitStore, deleteMessagesByAuthor, directRoomId, migrateGuestToOfficial, readAccountVault, readOfficialRefreshToken, readOrbitStore, replaceProfileEverywhere, saveAccountSnapshot, writeOrbitStore, type OrbitStore } from "./localOrbit";
 
 const STORAGE_KEY = "orbit-chat.local-store.v2";
 
@@ -20,6 +20,17 @@ describe("writeOrbitStore", () => {
         get length() { return values.size; },
       },
     });
+  });
+
+  it("apaga uma única vez os dados anteriores aprovados para reset", () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ profile: { id: "guest" } }));
+    localStorage.setItem("resenha-chat.account-vault.v1", "[]");
+    localStorage.setItem("resenha-chat.e2ee.keypair.guest", "{}");
+
+    expect(applyApprovedDataReset()).toBe(true);
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem("resenha-chat.e2ee.keypair.guest")).toBeNull();
+    expect(applyApprovedDataReset()).toBe(false);
   });
 
   it("não remove foto, mensagem ou anexo quando a cota local é excedida", () => {

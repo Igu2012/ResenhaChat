@@ -89,3 +89,14 @@
 - [x] Confirmar e reforçar a persistência da foto de perfil após reiniciar o app.
 - [x] Restaurar os botões de chamada de áudio e vídeo nas conversas diretas, mantendo-os ocultos nos cabeçalhos de servidores.
 - [x] Abrir o perfil do contato ao tocar no cabeçalho da conversa direta, sem exibir um botão separado de perfil.
+- [x] Remover textos restantes que indiquem que dados são guardados localmente no dispositivo.
+- [x] Definir e implementar a sincronização por conta no Google Drive para perfil, contatos, servidores, mensagens e solicitações entre dispositivos.
+- [x] Manter segredos de criptografia no cliente e sincronizar apenas dados e envelopes protegidos por conta.
+- [x] Bloquear a criação e remover o suporte a perfis Guest.
+- [ ] Executar, após confirmação final, o reset definitivo de contas e dados sociais existentes no Drive e no Firebase.
+- [x] Corrigir a atualização e a exibição da lista de membros em servidores.
+- [x] Remover o aviso interno sobre mensagens recuperadas enquanto o usuário estava off-line.
+- [x] Exibir abaixo do nome do contato um indicador de digitação em conversas diretas.
+- [x] Ocultar nomes de arquivo em GIFs, figurinhas e áudios gravados no app, mantendo-os nos anexos da galeria.
+- [x] Usar miniaturas mais leves no seletor de GIFs e figurinhas sem reduzir a mídia enviada à conversa.
+- [x] Reproduzir vídeos enviados diretamente na conversa, mantendo a tela ampliada como opção.
