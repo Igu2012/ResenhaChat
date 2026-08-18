@@ -60,7 +60,7 @@ describe("writeOrbitStore", () => {
     expect(result.store.messages["dm:a:b"][0].attachment?.dataUrl).toBe("data:image/png;base64,conteudo-pesado");
   });
 
-  it("preserva o cartão de convite e sua resposta no histórico local", () => {
+	it("preserva o cartão de convite e sua resposta no histórico local", () => {
     const ana = { id: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "", avatarUrl: null };
     const group = { id: "grupo", name: "Resenha", imageUrl: null, ownerId: "ana", members: [ana], channels: [] };
     const store: OrbitStore = { profile: ana, contacts: [], groups: [], requests: [], messages: { "dm:ana:bia": [{ id: "invite:1", roomId: "dm:ana:bia", author: ana, body: null, attachment: null, createdAt: "2026-08-17T00:00:00.000Z", groupInvite: { id: "group:1", kind: "group", from: ana, group, createdAt: "2026-08-17T00:00:00.000Z" }, groupInviteStatus: "accepted" }] } };
@@ -68,10 +68,19 @@ describe("writeOrbitStore", () => {
     expect(writeOrbitStore(store).saved).toBe(true);
     const restored = readOrbitStore();
     expect(restored.messages["dm:ana:bia"][0].groupInvite?.group?.name).toBe("Resenha");
-    expect(restored.messages["dm:ana:bia"][0].groupInviteStatus).toBe("accepted");
-  });
+	  expect(restored.messages["dm:ana:bia"][0].groupInviteStatus).toBe("accepted");
+	});
 
-  it("remove reações junto com o conteúdo quando uma mensagem é excluída", () => {
+	it("preserva pedidos de contato enviados enquanto aguardam resposta", () => {
+	  const ana = { id: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "", avatarUrl: null };
+	  const bia = { id: "bia", connectionCode: "BIA123", displayName: "Bia", bio: "", avatarUrl: null };
+	  const store: OrbitStore = { profile: ana, contacts: [], groups: [], requests: [], outgoingRequests: [{ id: "contact:ana:bia", kind: "contact", to: bia, createdAt: "2026-08-18T22:00:00.000Z" }], messages: {} };
+
+	  expect(writeOrbitStore(store).saved).toBe(true);
+	  expect(readOrbitStore().outgoingRequests).toEqual(store.outgoingRequests);
+	});
+
+	it("remove reações junto com o conteúdo quando uma mensagem é excluída", () => {
     const author = { id: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "", avatarUrl: null };
     const deleted = deleteMessagesByAuthor({ "dm:ana:bia": [{ id: "m1", roomId: "dm:ana:bia", author, body: "Oi", attachment: null, createdAt: "2026-08-16T00:00:00.000Z", reactions: { "👍": ["ana", "bia"] } }] }, "dm:ana:bia", "ana", "ana");
     expect(deleted["dm:ana:bia"][0]).toMatchObject({ body: null, attachment: null, reactions: {} });

@@ -132,3 +132,11 @@
 - [x] Corrigir a reconexão compartilhada entre o site e o aplicativo.
 - [x] Investigar e corrigir a rejeição de conexão diretamente no servidor.
 - [x] Verificar se a configuração OAuth ausente no servidor interfere na conexão das contas.
+- [x] Remover todos os avisos internos exibidos no site e no aplicativo.
+- [x] Vibrar brevemente no celular ao enviar uma mensagem sem alterar as notificações do Android.
+- [x] Exibir mensagem recebida no PC apenas como notificação do navegador, sem aviso interno.
+- [x] Exibir pedidos enviados e pendentes no painel de Solicitações.
+- [x] Permitir cancelar um pedido enviado e mostrar seu horário de envio.
+- [x] Melhorar e destacar o toque de chamadas recebidas.
+- [x] Oferecer uma única vez o silenciamento de chamadas de uma pessoa ao recusar.
+- [x] Adicionar modo Não perturbe no perfil e exibi-lo para os outros usuários.

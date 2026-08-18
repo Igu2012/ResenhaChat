@@ -11,6 +11,7 @@ export type LocalProfile = {
   accountUid?: string;
   authToken?: string;
   encryptionPublicKey?: JsonWebKey;
+  availability?: "online" | "away" | "dnd";
 };
 
 export type LocalAttachment = {
@@ -69,12 +70,20 @@ export type LocalRequest = {
   createdAt: string;
 };
 
+export type LocalOutgoingRequest = {
+  id: string;
+  kind: "contact";
+  to: LocalProfile;
+  createdAt: string;
+};
+
 export type OrbitStore = {
   profile: LocalProfile | null;
   contacts: LocalProfile[];
   groups: LocalGroup[];
   messages: Record<string, LocalMessage[]>;
   requests: LocalRequest[];
+  outgoingRequests?: LocalOutgoingRequest[];
   unreadRooms?: Record<string, { count: number; mentions: number }>;
 };
 
@@ -83,7 +92,7 @@ const ACCOUNT_VAULT_KEY = "resenha-chat.account-vault.v1";
 const REFRESH_TOKEN_KEY = "resenha-chat.official-refresh-tokens.v1";
 const RESET_MARKER_KEY = "resenha-chat.data-reset-id";
 export const ACTIVE_DATA_RESET_ID = "2026-08-18-drive-account-reset-v2";
-const EMPTY_STORE: OrbitStore = { profile: null, contacts: [], groups: [], messages: {}, requests: [], unreadRooms: {} };
+const EMPTY_STORE: OrbitStore = { profile: null, contacts: [], groups: [], messages: {}, requests: [], outgoingRequests: [], unreadRooms: {} };
 
 export type LocalAccountRecord = {
   id: string;
@@ -109,6 +118,7 @@ export function redactOrbitStore(store: OrbitStore): OrbitStore {
     contacts: (store.contacts || []).map(redactAuthor),
     groups: (store.groups || []).map(group => ({ ...group, members: (group.members || []).map(redactAuthor) })),
     requests: (store.requests || []).map(request => ({ ...request, from: redactAuthor(request.from), group: request.group ? { ...request.group, members: (request.group.members || []).map(redactAuthor) } : undefined })),
+    outgoingRequests: (store.outgoingRequests || []).map(request => ({ ...request, to: redactAuthor(request.to) })),
     messages: Object.fromEntries(Object.entries(store.messages || {}).map(([roomId, messages]) => [roomId, messages.map(message => ({ ...message, author: redactAuthor(message.author) }))])),
     unreadRooms: { ...(store.unreadRooms || {}) },
   };
@@ -122,6 +132,7 @@ export function replaceProfileEverywhere(store: OrbitStore, profile: LocalProfil
     contacts: (store.contacts || []).map(merge),
     groups: (store.groups || []).map(group => ({ ...group, members: (group.members || []).map(merge) })),
     requests: (store.requests || []).map(request => ({ ...request, from: merge(request.from), group: request.group ? { ...request.group, members: (request.group.members || []).map(merge) } : undefined })),
+    outgoingRequests: (store.outgoingRequests || []).map(request => ({ ...request, to: merge(request.to) })),
     messages: Object.fromEntries(Object.entries(store.messages || {}).map(([roomId, messages]) => [roomId, messages.map(message => ({ ...message, author: merge(message.author) }))])),
   };
 }
@@ -182,7 +193,7 @@ export function accountStoreForSwitch(record: LocalAccountRecord): OrbitStore {
 }
 
 export function createEmptyOrbitStore(): OrbitStore {
-  return { profile: null, contacts: [], groups: [], messages: {}, requests: [], unreadRooms: {} };
+  return { profile: null, contacts: [], groups: [], messages: {}, requests: [], outgoingRequests: [], unreadRooms: {} };
 }
 
 export function applyApprovedDataReset(storage: Storage = localStorage) {
@@ -226,6 +237,7 @@ export function readOrbitStore(): OrbitStore {
         ? Object.fromEntries(Object.entries(parsed.messages).map(([roomId, messages]) => [roomId, Array.isArray(messages) ? messages.map(message => ({ ...message, attachmentUnavailable: false })) : []]))
         : {},
       requests: Array.isArray(parsed.requests) ? parsed.requests : [],
+      outgoingRequests: Array.isArray(parsed.outgoingRequests) ? parsed.outgoingRequests : [],
       unreadRooms: parsed.unreadRooms && typeof parsed.unreadRooms === "object" ? parsed.unreadRooms : {},
     };
   } catch {
@@ -245,6 +257,8 @@ function cloneOrbitStore(store: OrbitStore): OrbitStore {
     profile: store.profile ? { ...store.profile } : null,
     contacts: [...store.contacts],
     groups: [...store.groups],
+    requests: [...store.requests],
+    outgoingRequests: [...(store.outgoingRequests || [])],
     messages: Object.fromEntries(Object.entries(store.messages).map(([roomId, messages]) => [roomId, messages.map(message => ({ ...message, attachment: message.attachment ? { ...message.attachment } : null }))])),
     unreadRooms: { ...(store.unreadRooms || {}) },
   };
@@ -345,6 +359,7 @@ export function migrateGuestToOfficial(store: OrbitStore, officialProfile: Local
     profile: officialProfile,
     contacts: store.contacts.map(replaceAuthor),
     requests: store.requests.map(request => ({ ...request, from: replaceAuthor(request.from), group: request.group ? { ...request.group, members: request.group.members.map(replaceAuthor), ownerId: request.group.ownerId === guest.id ? officialProfile.id : request.group.ownerId } : undefined })),
+    outgoingRequests: (store.outgoingRequests || []).map(request => ({ ...request, to: replaceAuthor(request.to) })),
     groups: store.groups.map(group => ({ ...group, ownerId: group.ownerId === guest.id ? officialProfile.id : group.ownerId, members: group.members.map(replaceAuthor) })),
     messages: Object.entries(store.messages).reduce<Record<string, LocalMessage[]>>((next, [roomId, messages]) => {
       const migratedRoomId = migrateDirectRoomId(roomId, guest.id, officialProfile.id);

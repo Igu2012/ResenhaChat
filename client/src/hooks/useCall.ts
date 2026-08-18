@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { addNativeResumeListener, beginNativeCallSession, endNativeCallSession, isNativeRuntime, requestNativeMediaPermission, startNativeScreenCapture, type NativeScreenCapture, updateNativeCallSession } from "@/lib/nativeRuntime";
 
-type CallProfile = { id: string; displayName: string; avatarUrl: string | null };
+type CallProfile = { id: string; displayName: string; avatarUrl: string | null; availability?: "online" | "away" | "dnd" };
 type RemotePeer = { socketId: string; stream: MediaStream; profile: CallProfile; sharingScreen: boolean };
 type SignalPayload = {
   from: string;
@@ -19,6 +19,22 @@ const rtcConfiguration: RTCConfiguration = {
   ],
   iceCandidatePoolSize: 4,
 };
+
+const MUTED_CALLERS_KEY = "resenha-chat.muted-callers.v1";
+const MUTED_CALLERS_PROMPTED_KEY = "resenha-chat.muted-callers-prompted.v1";
+
+function storedCallerIds(key: string) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "[]") as unknown;
+    return new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function saveCallerIds(key: string, callerIds: Set<string>) {
+  try { localStorage.setItem(key, JSON.stringify(Array.from(callerIds))); } catch { /* A chamada continua mesmo se não for possível guardar a escolha. */ }
+}
 
 function isMobileDevice() {
   return typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
@@ -112,19 +128,20 @@ export function useCall(socket: Socket | null) {
         void context.resume();
         const oscillator = context.createOscillator();
         const gain = context.createGain();
-        oscillator.frequency.setValueAtTime(760, context.currentTime);
+        oscillator.frequency.setValueAtTime(720, context.currentTime);
         gain.gain.setValueAtTime(0.0001, context.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.42);
+        gain.gain.exponentialRampToValueAtTime(0.2, context.currentTime + 0.025);
+        oscillator.frequency.setValueAtTime(920, context.currentTime + 0.18);
+        gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.62);
         oscillator.connect(gain).connect(context.destination);
         oscillator.start();
-        oscillator.stop(context.currentTime + 0.45);
+        oscillator.stop(context.currentTime + 0.65);
       } catch {
         // Alguns navegadores bloqueiam áudio automático até a primeira interação do usuário.
       }
     };
     tone();
-    ringtoneRef.current = window.setInterval(tone, 1400);
+    ringtoneRef.current = window.setInterval(tone, 1250);
   }, [stopRingtone]);
 
   const startIncomingAlert = useCallback((callerName: string) => {
@@ -349,6 +366,10 @@ export function useCall(socket: Socket | null) {
     const onMediaStates = ({ peers }: { peers: Array<{ socketId: string; sharingScreen: boolean }> }) => peers.forEach(peer => updatePeerSharing(peer.socketId, peer.sharingScreen));
     const onIncoming = (invite: IncomingCall) => {
       if (roomRef.current) return;
+      if (storedCallerIds(MUTED_CALLERS_KEY).has(invite.caller.id)) {
+        socket.emit("call:decline", { callerId: invite.caller.id, room: invite.room, muted: true });
+        return;
+      }
       setIncomingCall(invite);
       startIncomingAlert(invite.caller.displayName);
     };
@@ -427,8 +448,20 @@ export function useCall(socket: Socket | null) {
     }
   }, [endCall, ensureOverlayPermission, incomingCall, joinRoomWithMedia, stopIncomingAlert]);
 
-  const declineIncomingCall = useCallback(() => {
-    if (incomingCall) socket?.emit("call:decline", { callerId: incomingCall.caller.id, room: incomingCall.room });
+  const shouldOfferCallerMute = useCallback((callerId: string) => !storedCallerIds(MUTED_CALLERS_PROMPTED_KEY).has(callerId), []);
+
+  const declineIncomingCall = useCallback((muteCaller = false) => {
+    if (incomingCall) {
+      const prompted = storedCallerIds(MUTED_CALLERS_PROMPTED_KEY);
+      prompted.add(incomingCall.caller.id);
+      saveCallerIds(MUTED_CALLERS_PROMPTED_KEY, prompted);
+      if (muteCaller) {
+        const muted = storedCallerIds(MUTED_CALLERS_KEY);
+        muted.add(incomingCall.caller.id);
+        saveCallerIds(MUTED_CALLERS_KEY, muted);
+      }
+      socket?.emit("call:decline", { callerId: incomingCall.caller.id, room: incomingCall.room, muted: muteCaller });
+    }
     stopIncomingAlert();
     setIncomingCall(null);
   }, [incomingCall, socket, stopIncomingAlert]);
@@ -578,5 +611,5 @@ export function useCall(socket: Socket | null) {
     setMinimized(true);
   }, []);
 
-  return { room, localStream, remotePeers, incomingCall, outgoingCall, muted, cameraOff, sharingScreen, cameraFacing, switchingCamera, minimized, error, startCall, acceptIncomingCall, declineIncomingCall, endCall, toggleMute, toggleCamera, switchCamera, shareScreen, stopSharing, minimizeCall, restoreCall };
+  return { room, localStream, remotePeers, incomingCall, outgoingCall, muted, cameraOff, sharingScreen, cameraFacing, switchingCamera, minimized, error, startCall, acceptIncomingCall, declineIncomingCall, shouldOfferCallerMute, endCall, toggleMute, toggleCamera, switchCamera, shareScreen, stopSharing, minimizeCall, restoreCall };
 }
