@@ -121,7 +121,7 @@ function IconButton({ label, onClick, children, active = false, disabled = false
 }
 
 function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/75 p-4 backdrop-blur-sm" onMouseDown={onClose}><div className="orbit-enter w-full max-w-md rounded-3xl border border-white/[.09] bg-[#1d2030] p-6 shadow-2xl" onMouseDown={event => event.stopPropagation()}>{children}</div></div>;
+  return <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/75 p-3 backdrop-blur-sm sm:p-4" onMouseDown={onClose}><div className="orbit-enter max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-x-hidden overflow-y-auto rounded-3xl border border-white/[.09] bg-[#1d2030] p-4 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-6" onMouseDown={event => event.stopPropagation()}>{children}</div></div>;
 }
 
 function createVideoPreview(dataUrl: string): Promise<string | null> {
@@ -2031,7 +2031,31 @@ function ServerMemberManagerModal({ member, serverProfile, canChangeRole, onClos
   const [tag, setTag] = useState(serverProfile?.tag || "");
   const [tagColor, setTagColor] = useState(serverProfile?.tagColor || "#8b5cf6");
   const [role, setRole] = useState<"admin" | "member">(serverProfile?.role === "admin" ? "admin" : "member");
-  return <Modal onClose={onClose}><div className="flex items-start justify-between"><div><h2 className="text-lg font-bold">Perfil no servidor</h2><p className="mt-1 text-sm text-slate-400">{member.displayName}</p></div><IconButton label="Fechar" onClick={onClose}><X size={18} /></IconButton></div><form onSubmit={event => { event.preventDefault(); onSave({ displayName: displayName.trim().slice(0, 32), tag: tag.trim().slice(0, 16), tagColor: /^#[0-9a-f]{6}$/i.test(tagColor) ? tagColor : "#8b5cf6", role }); }}><label className="mt-5 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Display name exclusivo<Input value={displayName} onChange={event => setDisplayName(event.target.value)} className="mt-2 h-10 border-white/[.09] bg-[#11131d] text-white" /></label><label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Tag<label className="mt-2 flex items-center gap-2"><Input value={tag} onChange={event => setTag(event.target.value)} className="h-10 border-white/[.09] bg-[#11131d] text-white" placeholder="Ex.: Moderador" /><Input type="color" value={tagColor} onChange={event => setTagColor(event.target.value)} className="h-10 w-14 border-white/[.09] bg-[#11131d] p-1" /></label></label>{canChangeRole && <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Papel<select value={role} onChange={event => setRole(event.target.value as "admin" | "member")} className="mt-2 h-10 w-full rounded-lg border border-white/[.09] bg-[#11131d] px-3 text-white"><option value="member">Membro</option><option value="admin">Administrador</option></select></label>}<Button className="mt-5 h-11 w-full rounded-xl bg-violet-500 hover:bg-violet-400"><Check size={17} />Salvar perfil do servidor</Button></form>{onRemove && <Button type="button" onClick={onRemove} variant="outline" className="mt-3 h-10 w-full border-rose-400/30 text-rose-200 hover:bg-rose-500/15 hover:text-rose-100"><Trash2 size={16} />Remover do servidor e excluir mensagens</Button>}</Modal>;
+  return <Modal onClose={onClose}>
+    <div className="flex min-w-0 items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h2 className="text-lg font-bold">Perfil no servidor</h2>
+        <p className="mt-1 truncate text-sm text-slate-400">{member.displayName}</p>
+      </div>
+      <div className="shrink-0"><IconButton label="Fechar" onClick={onClose}><X size={18} /></IconButton></div>
+    </div>
+    <form onSubmit={event => { event.preventDefault(); onSave({ displayName: displayName.trim().slice(0, 32), tag: tag.trim().slice(0, 16), tagColor: /^#[0-9a-f]{6}$/i.test(tagColor) ? tagColor : "#8b5cf6", role }); }}>
+      <label className="mt-5 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">
+        Display name exclusivo
+        <Input value={displayName} onChange={event => setDisplayName(event.target.value)} className="mt-2 h-10 border-white/[.09] bg-[#11131d] text-white" />
+      </label>
+      <div className="mt-4 min-w-0 text-xs font-bold uppercase tracking-[.12em] text-slate-400">
+        <label htmlFor="server-member-tag">Tag</label>
+        <div className="mt-2 flex min-w-0 items-center gap-2">
+          <Input id="server-member-tag" value={tag} onChange={event => setTag(event.target.value)} className="h-10 min-w-0 flex-1 border-white/[.09] bg-[#11131d] text-white" placeholder="Ex.: Moderador" />
+          <Input aria-label="Cor da tag" type="color" value={tagColor} onChange={event => setTagColor(event.target.value)} className="h-10 w-12 shrink-0 border-white/[.09] bg-[#11131d] p-1" />
+        </div>
+      </div>
+      {canChangeRole && <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Papel<select value={role} onChange={event => setRole(event.target.value as "admin" | "member")} className="mt-2 h-10 w-full rounded-lg border border-white/[.09] bg-[#11131d] px-3 text-white"><option value="member">Membro</option><option value="admin">Administrador</option></select></label>}
+      <Button className="mt-5 h-11 w-full rounded-xl bg-violet-500 hover:bg-violet-400"><Check size={17} />Salvar perfil do servidor</Button>
+    </form>
+    {onRemove && <Button type="button" onClick={onRemove} variant="outline" className="mt-3 h-auto min-h-10 w-full whitespace-normal border-rose-400/30 px-3 py-2 text-center leading-tight text-rose-200 hover:bg-rose-500/15 hover:text-rose-100"><Trash2 size={16} />Remover do servidor e excluir mensagens</Button>}
+  </Modal>;
 }
 
 function ProfileViewer({ profile, serverProfile, ownId, onClose, onMessage }: { profile: LocalProfile; serverProfile?: { displayName?: string; tag?: string; tagColor?: string; role?: "owner" | "admin" | "member" }; ownId: string; onClose: () => void; onMessage: () => void }) {
