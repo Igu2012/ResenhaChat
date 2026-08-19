@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decryptAccountSnapshot, encryptAccountSnapshot, mergeAccountStores, restoreAccountStore } from "./accountDriveSync";
+import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, mergeAccountStores, restoreAccountStore } from "./accountDriveSync";
 
 describe("cofre de conta no Drive", () => {
   it("cifra o snapshot com a senha antes de prepará-lo para sincronização", async () => {
@@ -9,6 +9,14 @@ describe("cofre de conta no Drive", () => {
     expect(JSON.stringify(snapshot)).not.toContain("contacts");
     await expect(decryptAccountSnapshot("SenhaSegura1", snapshot)).resolves.toEqual(payload);
     await expect(decryptAccountSnapshot("SenhaErrada1", snapshot)).rejects.toThrow();
+  });
+
+  it("cifra uma mídia separada para que ela não aumente a cópia principal da conta", async () => {
+    const media = { dataUrl: "data:image/png;base64,midia-protegida", previewDataUrl: "data:image/jpeg;base64,capa" };
+    const encrypted = await encryptAccountDriveMedia("SenhaSegura1", media);
+
+    expect(JSON.stringify(encrypted)).not.toContain("midia-protegida");
+    await expect(decryptAccountDriveMedia("SenhaSegura1", encrypted)).resolves.toEqual(media);
   });
 });
 

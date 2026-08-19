@@ -20,6 +20,7 @@ export type LocalAttachment = {
   size: number;
   dataUrl: string | null;
   previewDataUrl?: string | null;
+  driveMediaId?: string;
   unavailableOffline?: boolean;
   recordedInApp?: boolean;
   sentAsMessage?: "gif" | "sticker";

@@ -13,6 +13,8 @@ export type AccountSyncPayload = {
   keyPair: { privateKey: JsonWebKey; publicKey: JsonWebKey } | null;
 };
 
+export type AccountDriveMedia = { dataUrl: string; previewDataUrl?: string | null };
+
 function uniqueById<T extends { id: string }>(remote: T[], local: T[]) {
   return Array.from(new Map([...remote, ...local].map(item => [item.id, item])).values());
 }
@@ -59,6 +61,7 @@ export function restoreAccountStore(remote: OrbitStore, local: OrbitStore): Orbi
 
 type SyncReadResponse = { ok: boolean; revision?: number; snapshot?: EncryptedAccountSnapshot | null; message?: string };
 type SyncWriteResponse = SyncReadResponse & { conflict?: boolean };
+type MediaReadResponse = { ok: boolean; media?: EncryptedAccountSnapshot; message?: string };
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -97,6 +100,22 @@ export async function decryptAccountSnapshot(password: string, snapshot: Encrypt
   return payload;
 }
 
+export async function encryptAccountDriveMedia(password: string, media: AccountDriveMedia): Promise<EncryptedAccountSnapshot> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveSnapshotKey(password, salt, ["encrypt"]);
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoder.encode(JSON.stringify(media)));
+  return { version: 1, salt: bytesToBase64(salt), iv: bytesToBase64(iv), ciphertext: bytesToBase64(new Uint8Array(encrypted)), updatedAt: Date.now() };
+}
+
+export async function decryptAccountDriveMedia(password: string, media: EncryptedAccountSnapshot): Promise<AccountDriveMedia> {
+  const key = await deriveSnapshotKey(password, base64ToBytes(media.salt), ["decrypt"]);
+  const bytes = await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64ToBytes(media.iv) }, key, base64ToBytes(media.ciphertext));
+  const payload = JSON.parse(decoder.decode(bytes)) as Partial<AccountDriveMedia>;
+  if (!payload || typeof payload.dataUrl !== "string") throw new Error("A mídia salva está inválida.");
+  return { dataUrl: payload.dataUrl, previewDataUrl: typeof payload.previewDataUrl === "string" || payload.previewDataUrl === null ? payload.previewDataUrl : undefined };
+}
+
 function headers(accountId: string, idToken: string) {
   return { "content-type": "application/json", authorization: `Bearer ${idToken}`, "x-resenha-account-id": accountId };
 }
@@ -112,6 +131,23 @@ export async function saveAccountSnapshotToDrive(endpoint: string, accountId: st
   const response = await request(endpoint, { method: "PUT", headers: headers(accountId, idToken), body: JSON.stringify({ revision, snapshot }) });
   const result = await response.json() as SyncWriteResponse;
   if (response.status === 409 && result.conflict) return { conflict: true as const, revision: result.revision || 0, snapshot: result.snapshot || null };
-  if (!response.ok || !result.ok) throw new Error(result.message || "Não foi possível salvar os dados da conta.");
+  if (!response.ok || !result.ok) throw syncError(response.status, result.message || "Não foi possível salvar os dados da conta.");
   return { conflict: false as const, revision: result.revision || revision + 1 };
+}
+
+function syncError(status: number, message: string) {
+  return Object.assign(new Error(message), { status });
+}
+
+export async function saveAccountMediaToDrive(endpoint: string, accountId: string, idToken: string, mediaId: string, media: EncryptedAccountSnapshot, request: typeof fetch = fetch) {
+  const response = await request(`${endpoint}/${encodeURIComponent(mediaId)}`, { method: "PUT", headers: headers(accountId, idToken), body: JSON.stringify({ media }) });
+  const result = await response.json() as MediaReadResponse;
+  if (!response.ok || !result.ok) throw syncError(response.status, result.message || "Não foi possível salvar a mídia.");
+}
+
+export async function fetchAccountMediaFromDrive(endpoint: string, accountId: string, idToken: string, mediaId: string, request: typeof fetch = fetch) {
+  const response = await request(`${endpoint}/${encodeURIComponent(mediaId)}`, { headers: headers(accountId, idToken) });
+  const result = await response.json() as MediaReadResponse;
+  if (!response.ok || !result.ok || !result.media) throw syncError(response.status, result.message || "Não foi possível carregar a mídia.");
+  return result.media;
 }

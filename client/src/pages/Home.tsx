@@ -39,7 +39,7 @@ import {
 	  writeOrbitStore,
 	} from "@/lib/localOrbit";
 		import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, exportStoredKeyPair, isEncryptedMessage, restoreStoredKeyPair } from "@/lib/e2ee";
-		import { decryptAccountSnapshot, encryptAccountSnapshot, fetchAccountSnapshot, saveAccountSnapshotToDrive } from "@/lib/accountDriveSync";
+		import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, fetchAccountMediaFromDrive, fetchAccountSnapshot, restoreAccountStore, saveAccountMediaToDrive, saveAccountSnapshotToDrive } from "@/lib/accountDriveSync";
 		import { addNativeBackButtonListener, checkForUpdate, exitNativeApp, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
 		import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
 		import { attachmentRetentionClass } from "@/lib/attachmentRetention";
@@ -360,7 +360,8 @@ export default function Home() {
 	  const driveSyncPasswordRef = useRef<string | null>(null);
 	  const driveSyncRevisionRef = useRef(0);
 	  const driveSyncRunningRef = useRef(false);
-	  const queuedDriveSyncRef = useRef<OrbitStore | null>(null);
+		  const queuedDriveSyncRef = useRef<OrbitStore | null>(null);
+		  const syncedDriveMediaRef = useRef(new Set<string>());
 	  const storeRef = useRef<OrbitStore>(store);
   const contactIdsRef = useRef<string[]>(store.contacts.map(contact => contact.id));
   const syncContactPresenceRef = useRef<(() => void) | null>(null);
@@ -868,35 +869,81 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
-	  const updateStore = (updater: (current: OrbitStore) => OrbitStore) => setStore(updater);
+		  const updateStore = (updater: (current: OrbitStore) => OrbitStore) => setStore(updater);
 
-	  const syncOfficialStoreToDrive = async (candidate: OrbitStore) => {
+		  const hydrateDriveMedia = async (source: OrbitStore, password: string, accountId: string, idToken: string) => {
+		    const messages = Object.fromEntries(await Promise.all(Object.entries(source.messages || {}).map(async ([roomId, list]) => [roomId, await Promise.all(list.map(async message => {
+		      const attachment = message.attachment;
+		      if (!attachment?.driveMediaId || attachment.dataUrl) return message;
+		      try {
+		        const encrypted = await fetchAccountMediaFromDrive(runtimeApiUrl("/api/account/media"), accountId, idToken, attachment.driveMediaId);
+		        const media = await decryptAccountDriveMedia(password, encrypted);
+		        return { ...message, attachment: { ...attachment, dataUrl: media.dataUrl, previewDataUrl: media.previewDataUrl, unavailableOffline: false } };
+		      } catch {
+		        return { ...message, attachment: { ...attachment, unavailableOffline: true } };
+		      }
+		    }))] as const)));
+		    return { ...source, messages };
+		  };
+
+		  const storeForDrive = async (source: OrbitStore, password: string, accountId: string, idToken: string) => {
+		    const messages = Object.fromEntries(await Promise.all(Object.entries(source.messages || {}).map(async ([roomId, list]) => [roomId, await Promise.all(list.map(async message => {
+		      const attachment = message.attachment;
+		      if (!attachment?.dataUrl) return message;
+		      const mediaId = attachment.driveMediaId || `attachment-${message.id}`;
+		      if (!syncedDriveMediaRef.current.has(mediaId)) {
+		        const media = await encryptAccountDriveMedia(password, { dataUrl: attachment.dataUrl, previewDataUrl: attachment.previewDataUrl });
+		        await saveAccountMediaToDrive(runtimeApiUrl("/api/account/media"), accountId, idToken, mediaId, media);
+		        syncedDriveMediaRef.current.add(mediaId);
+		      }
+		      return { ...message, attachment: { ...attachment, dataUrl: null, previewDataUrl: null, driveMediaId: mediaId, unavailableOffline: false } };
+		    }))] as const)));
+		    return { ...source, messages };
+		  };
+
+		  const syncOfficialStoreToDrive = async (candidate: OrbitStore) => {
 	    const account = candidate.profile;
 	    const password = driveSyncPasswordRef.current;
 	    if (!account || account.accountType !== "official" || !account.authToken || !password) return;
 	    if (driveSyncRunningRef.current) {
 	      queuedDriveSyncRef.current = candidate;
 	      return;
-	    }
-	    driveSyncRunningRef.current = true;
-	    let next: OrbitStore | null = candidate;
-	    try {
-	      while (next) {
-	        queuedDriveSyncRef.current = null;
-	        const nextAccount = next.profile;
-	        if (!nextAccount || nextAccount.accountType !== "official" || !nextAccount.authToken) break;
-	        const snapshot = await encryptAccountSnapshot(password, { store: redactOrbitStore(next), keyPair: exportStoredKeyPair(nextAccount.id) });
-	        const result = await saveAccountSnapshotToDrive(runtimeApiUrl("/api/account/sync"), nextAccount.id, nextAccount.authToken, driveSyncRevisionRef.current, snapshot);
-	        if (!result.conflict) {
-	          driveSyncRevisionRef.current = result.revision;
-	        } else {
-	          driveSyncRevisionRef.current = result.revision;
-	          if (result.snapshot) {
-	            const remote = await decryptAccountSnapshot(password, result.snapshot);
-	            try { await restoreStoredKeyPair(nextAccount.id, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
-	            const restored = applyOfficialSession(remote.store, { uid: nextAccount.id, username: nextAccount.username, idToken: nextAccount.authToken });
-	            setStore(restored);
-	            next = queuedDriveSyncRef.current || restored;
+		    }
+		    driveSyncRunningRef.current = true;
+		    let next: OrbitStore | null = candidate;
+		    let refreshedForThisRun = false;
+		    try {
+		      while (next) {
+		        queuedDriveSyncRef.current = null;
+		        const nextAccount = next.profile;
+		        if (!nextAccount || nextAccount.accountType !== "official" || !nextAccount.authToken) break;
+		        let result;
+		        try {
+		          const compactStore = await storeForDrive(next, password, nextAccount.id, nextAccount.authToken);
+		          const snapshot = await encryptAccountSnapshot(password, { store: redactOrbitStore(compactStore), keyPair: exportStoredKeyPair(nextAccount.id) });
+		          result = await saveAccountSnapshotToDrive(runtimeApiUrl("/api/account/sync"), nextAccount.id, nextAccount.authToken, driveSyncRevisionRef.current, snapshot);
+		        } catch (error) {
+		          const status = (error as { status?: unknown })?.status;
+		          const refreshToken = readOfficialRefreshToken(nextAccount.id);
+		          if (status === 401 && refreshToken && !refreshedForThisRun) {
+		            refreshedForThisRun = true;
+		            const renewed = await refreshOfficialAccount(runtimeApiUrl("/api/account/refresh"), refreshToken);
+		            next = applyOfficialSession(next, renewed);
+		            setStore(current => current.profile?.id === nextAccount.id ? applyOfficialSession(current, renewed) : current);
+		            continue;
+		          }
+		          throw error;
+		        }
+		        if (!result.conflict) {
+		          driveSyncRevisionRef.current = result.revision;
+		        } else {
+		          driveSyncRevisionRef.current = result.revision;
+		          if (result.snapshot) {
+		            const remote = await decryptAccountSnapshot(password, result.snapshot);
+		            try { await restoreStoredKeyPair(nextAccount.id, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
+		            const restored = applyOfficialSession(restoreAccountStore(remote.store, next), { uid: nextAccount.id, username: nextAccount.username, idToken: nextAccount.authToken });
+		            setStore(restored);
+		            next = queuedDriveSyncRef.current || restored;
 	            continue;
 	          }
 	        }
@@ -1001,12 +1048,12 @@ export default function Home() {
 	      } catch (error) {
 	        console.warn("Não foi possível recuperar os dados da conta no Drive.", error);
 	      }
-	      if (remoteSnapshot?.snapshot) {
-	        try {
-	          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
-	          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
-	          remoteStore = remote.store;
-	          try { await restoreStoredKeyPair(account.uid, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
+		      if (remoteSnapshot?.snapshot) {
+		        try {
+		          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
+		          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
+		          remoteStore = await hydrateDriveMedia(remote.store, password, account.uid, account.idToken);
+		          try { await restoreStoredKeyPair(account.uid, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
 	        } catch (error) {
 	          console.warn("Não foi possível abrir a cópia da conta.", error);
 	          toast.error("Não foi possível abrir sua conta. Tente novamente.");
@@ -1081,12 +1128,12 @@ export default function Home() {
 	      } catch (error) {
 	        console.warn("Não foi possível restaurar a conta no Drive.", error);
 	      }
-	      if (remoteSnapshot?.snapshot) {
-	        try {
-	          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
-	          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
-	          try { await restoreStoredKeyPair(result.uid, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
-	          restoredStore = remote.store;
+		      if (remoteSnapshot?.snapshot) {
+		        try {
+		          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
+		          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
+		          try { await restoreStoredKeyPair(result.uid, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
+		          restoredStore = await hydrateDriveMedia(remote.store, password, result.uid, result.idToken);
 	        } catch (error) {
 	          console.warn("Não foi possível abrir a cópia da conta.", error);
 	          toast.error("Não foi possível abrir sua conta. Tente novamente.");
