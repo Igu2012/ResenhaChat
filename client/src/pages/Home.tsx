@@ -1729,6 +1729,7 @@ function AttachmentView({ attachment }: { attachment: LocalAttachment }) {
   const [zoom, setZoom] = useState(1);
   const [loading, setLoading] = useState(false);
   const [playRequested, setPlayRequested] = useState(false);
+  const placeholderRef = useRef<HTMLDivElement>(null);
   const isImage = attachment.mimeType.startsWith("image/");
   const isVideo = attachment.mimeType.startsWith("video/");
   const isAudio = attachment.mimeType.startsWith("audio/");
@@ -1747,9 +1748,27 @@ function AttachmentView({ attachment }: { attachment: LocalAttachment }) {
       link.click();
     }
   };
+  useEffect(() => {
+    if (attachment.dataUrl || (!isGif && !isVideo)) return;
+    const element = placeholderRef.current;
+    if (!element) return;
+    let timer: number | null = null;
+    const startWhenVisible = (entries: IntersectionObserverEntry[]) => {
+      const entry = entries[0];
+      if (!entry?.isIntersecting) {
+        if (timer) window.clearTimeout(timer);
+        timer = null;
+        return;
+      }
+      const distanceFromBottom = Math.max(0, window.innerHeight - entry.boundingClientRect.bottom);
+      timer = window.setTimeout(() => { void load("play"); }, 1_000 + Math.round(distanceFromBottom * 2));
+    };
+    const observer = new IntersectionObserver(startWhenVisible, { threshold: 0.35 });
+    observer.observe(element);
+    return () => { observer.disconnect(); if (timer) window.clearTimeout(timer); };
+  }, [attachment.dataUrl, attachment.driveMediaId, isGif, isVideo]);
   if (!attachment.dataUrl) {
-    if (isGif) return <button type="button" onClick={() => void load("play")} className="mt-2 block w-full max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black text-left"><div className="relative grid h-52 place-items-center bg-[#171a25]">{attachment.previewDataUrl ? <img src={attachment.previewDataUrl} alt="Primeira cena do GIF" className="h-full w-full object-cover" /> : <FileIcon size={28} className="text-slate-500" />}<span className="absolute grid h-12 w-12 place-items-center rounded-full bg-white/90 text-lg text-slate-950">▶</span></div><span className="flex items-center gap-2 px-3 py-2 text-xs text-slate-300">{loading ? "Carregando GIF…" : "Toque para ver o GIF"}</span></button>;
-    if (isVideo) return <button type="button" onClick={() => void load("play")} className="mt-2 block w-full max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black text-left"><div className="relative grid h-52 place-items-center bg-[#171a25]">{attachment.previewDataUrl ? <img src={attachment.previewDataUrl} alt="Capa do vídeo" className="h-full w-full object-cover" /> : <FileIcon size={28} className="text-slate-500" />}<span className="absolute grid h-12 w-12 place-items-center rounded-full bg-white/90 text-lg text-slate-950">▶</span></div><span className="flex items-center gap-2 px-3 py-2 text-xs text-slate-300">{loading ? "Carregando vídeo…" : "Toque para assistir"}</span></button>;
+    if (isGif || isVideo) return <div ref={placeholderRef} onPointerDown={() => void load("play")} className="mt-2 block w-full max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black text-left"><div className="relative grid h-52 place-items-center bg-[#171a25]">{attachment.previewDataUrl ? <img src={attachment.previewDataUrl} alt={isGif ? "Primeira cena do GIF" : "Capa do vídeo"} className="h-full w-full object-cover" /> : <FileIcon size={28} className="text-slate-500" />}<span className="absolute grid h-11 w-11 place-items-center rounded-full bg-[#11131d]/80 text-violet-200"><Loader2 size={21} className="animate-spin" /></span></div></div>;
     if (isAudio) return <button type="button" onClick={() => void load("play")} className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><span className="text-xs text-slate-200">{loading ? "Carregando áudio…" : "Toque para ouvir"}</span></button>;
     return <button type="button" onClick={() => void load("download")} className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><FileIcon size={18} /></span><span className="min-w-0"><span className="block truncate text-xs font-bold">{attachment.name}</span><span className="text-[10px] text-slate-400">{loading ? "Baixando…" : "Baixar"}</span></span></button>;
   }

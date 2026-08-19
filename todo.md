@@ -168,3 +168,5 @@
 - [x] Corrigir o envio de uma nova cópia da conta ao mandar mensagens, confirmado pela atualização no Drive.
 - [x] Disparar diretamente e confirmar a cópia no Drive após cada mensagem enviada.
 - [x] Mostrar a primeira cena como prévia para GIFs enviados como arquivo antes de carregar o GIF completo.
+- [x] Carregar GIFs e vídeos automaticamente de baixo para cima com indicador de carregamento, sem botão ou texto de toque.
+- [x] Dar prioridade à mídia após um segundo visível e acelerar o carregamento quando a pessoa tocar nela.
