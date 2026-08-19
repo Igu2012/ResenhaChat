@@ -121,7 +121,8 @@ function headers(accountId: string, idToken: string) {
 }
 
 export async function fetchAccountSnapshot(endpoint: string, accountId: string, idToken: string, request: typeof fetch = fetch) {
-  const response = await request(endpoint, { headers: headers(accountId, idToken), cache: "no-store" });
+  const separator = endpoint.includes("?") ? "&" : "?";
+  const response = await request(`${endpoint}${separator}fresh=${Date.now()}-${Math.random().toString(36).slice(2)}`, { headers: headers(accountId, idToken), cache: "no-store" });
   const result = await response.json() as SyncReadResponse;
   if (!response.ok || !result.ok) throw new Error(result.message || "Não foi possível carregar os dados da conta.");
   return { revision: result.revision || 0, snapshot: result.snapshot || null };

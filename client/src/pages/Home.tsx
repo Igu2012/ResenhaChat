@@ -50,7 +50,9 @@ import {
 	import { isValidPassword, isValidUsername, PASSWORD_HTML_PATTERN, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordRuleMessage, passwordsMatch, USERNAME_HTML_PATTERN, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, usernameRuleMessage } from "../../../shared/credentials";
 	import { io, type Socket } from "socket.io-client";
 	import { filterInvitableContacts } from "@shared/groupInvites";
-import { useEffect, useMemo, useRef, useState } from "react";
+	import { useEffect, useMemo, useRef, useState } from "react";
+
+	let requestDriveAttachment: ((attachment: LocalAttachment) => Promise<LocalAttachment | null>) | null = null;
 import {
   Bell,
   Camera,
@@ -909,9 +911,6 @@ export default function Home() {
 		      const restored = applyOfficialSession(restoreAccountStore(remote.store, storeRef.current), { uid: account.id, username: account.username, idToken: account.authToken });
 		      lastDriveSnapshotRef.current = JSON.stringify(redactOrbitStore(restored));
 		      setStore(restored);
-		      void hydrateDriveMedia(remote.store, password, account.id, account.authToken).then(hydrated => {
-		        setStore(current => current.profile?.id === account.id ? applyOfficialSession(restoreAccountStore(hydrated, current), { uid: account.id, username: account.username, idToken: account.authToken }) : current);
-		      });
 		    } catch (error) {
 		      console.warn("Não foi possível atualizar esta conta agora.", error);
 		    } finally {
@@ -934,6 +933,24 @@ export default function Home() {
 		    return { ...source, messages };
 		  };
 
+		  const loadDriveAttachment = async (attachment: LocalAttachment) => {
+		    if (attachment.dataUrl) return attachment;
+		    const account = storeRef.current.profile;
+		    const password = driveSyncPasswordRef.current;
+		    if (!attachment.driveMediaId || !account || account.accountType !== "official" || !account.authToken || !password) return null;
+		    try {
+		      const encrypted = await fetchAccountMediaFromDrive(runtimeApiUrl("/api/account/media"), account.id, account.authToken, attachment.driveMediaId);
+		      const media = await decryptAccountDriveMedia(password, encrypted);
+		      const loaded = { ...attachment, dataUrl: media.dataUrl, previewDataUrl: media.previewDataUrl || attachment.previewDataUrl, unavailableOffline: false };
+		      updateStore(current => ({ ...current, messages: Object.fromEntries(Object.entries(current.messages || {}).map(([roomId, list]) => [roomId, list.map(message => message.attachment?.driveMediaId === attachment.driveMediaId ? { ...message, attachment: loaded } : message)])) }));
+		      return loaded;
+		    } catch (error) {
+		      console.warn("Não foi possível carregar este anexo agora.", error);
+		      return null;
+		    }
+		  };
+		  requestDriveAttachment = loadDriveAttachment;
+
 		  const storeForDrive = async (source: OrbitStore, password: string, accountId: string, idToken: string) => {
 		    const messages = Object.fromEntries(await Promise.all(Object.entries(source.messages || {}).map(async ([roomId, list]) => [roomId, await Promise.all(list.map(async message => {
 		      const attachment = message.attachment;
@@ -945,7 +962,7 @@ export default function Home() {
 		        await saveAccountMediaToDrive(runtimeApiUrl("/api/account/media"), accountId, idToken, mediaId, media);
 		        syncedDriveMediaRef.current.add(mediaId);
 		      }
-		      return { ...message, attachment: { ...attachment, dataUrl: null, previewDataUrl: null, driveMediaId: mediaId, unavailableOffline: false } };
+		      return { ...message, attachment: { ...attachment, dataUrl: null, previewDataUrl: attachment.previewDataUrl || null, driveMediaId: mediaId, unavailableOffline: false } };
 		    }))] as const)));
 		    return { ...source, messages };
 		  };
@@ -1161,9 +1178,6 @@ export default function Home() {
 	    profileRef.current = restoredProfile;
 	    const saved = writeOrbitStore(nextStore);
 	    setStore(saved.store);
-	    if (account && remoteHydration) void remoteHydration.then(hydrated => {
-	      setStore(current => current.profile?.id === account.uid ? applyOfficialSession(restoreAccountStore(hydrated, current), account) : current);
-	    });
 	    if (account) void syncOfficialStoreToDrive(saved.store);
 	    setAccountVault(saveAccountSnapshot(saved.store));
 	    if (!account) {
@@ -1214,9 +1228,6 @@ export default function Home() {
 	      }
 	      const syncedStore = applyOfficialSession(restoredStore, result);
 	      setStore(syncedStore);
-	      if (remoteHydration) void remoteHydration.then(hydrated => {
-	        setStore(current => current.profile?.id === result.uid ? applyOfficialSession(restoreAccountStore(hydrated, current), result) : current);
-	      });
 	      void syncOfficialStoreToDrive(syncedStore);
 	    } else {
 	      setStore(accountStoreForSwitch(record));
@@ -1686,15 +1697,36 @@ function Messages({ list, currentUser, serverOwnerId, onProfile, onReact, onDele
 function AttachmentView({ attachment }: { attachment: LocalAttachment }) {
   const [expanded, setExpanded] = useState(false);
   const [zoom, setZoom] = useState(1);
-  if (!attachment.dataUrl) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-100"><FileIcon size={17} /><span><strong>{attachment.name}</strong><br />Este anexo não está disponível neste momento.</span></div>;
+  const [loading, setLoading] = useState(false);
+  const [playRequested, setPlayRequested] = useState(false);
   const isImage = attachment.mimeType.startsWith("image/");
   const isVideo = attachment.mimeType.startsWith("video/");
-  if (attachment.mimeType.startsWith("audio/") && attachment.recordedInApp) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio controls src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /></div>;
+  const isAudio = attachment.mimeType.startsWith("audio/");
+  const load = async (mode: "play" | "download") => {
+    if (loading) return;
+    setLoading(true);
+    const loaded = await requestDriveAttachment?.(attachment);
+    setLoading(false);
+    if (!loaded?.dataUrl) return;
+    if (mode === "play") setPlayRequested(true);
+    if (mode === "download") {
+      const link = document.createElement("a");
+      link.href = loaded.dataUrl;
+      link.download = loaded.name;
+      link.click();
+    }
+  };
+  if (!attachment.dataUrl) {
+    if (isVideo) return <button type="button" onClick={() => void load("play")} className="mt-2 block w-full max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black text-left"><div className="relative grid h-52 place-items-center bg-[#171a25]">{attachment.previewDataUrl ? <img src={attachment.previewDataUrl} alt="Capa do vídeo" className="h-full w-full object-cover" /> : <FileIcon size={28} className="text-slate-500" />}<span className="absolute grid h-12 w-12 place-items-center rounded-full bg-white/90 text-lg text-slate-950">▶</span></div><span className="flex items-center gap-2 px-3 py-2 text-xs text-slate-300">{loading ? "Carregando vídeo…" : "Toque para assistir"}</span></button>;
+    if (isAudio) return <button type="button" onClick={() => void load("play")} className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><span className="text-xs text-slate-200">{loading ? "Carregando áudio…" : "Toque para ouvir"}</span></button>;
+    return <button type="button" onClick={() => void load("download")} className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><FileIcon size={18} /></span><span className="min-w-0"><span className="block truncate text-xs font-bold">{attachment.name}</span><span className="text-[10px] text-slate-400">{loading ? "Baixando…" : "Baixar"}</span></span></button>;
+  }
+  if (isAudio && attachment.recordedInApp) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio controls autoPlay={playRequested} src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /></div>;
   const open = () => { setZoom(1); setExpanded(true); };
 	  const viewer = expanded && <div className="fixed inset-0 z-[70] flex flex-col bg-black/95 p-4" role="dialog" aria-label={`Visualizar ${attachment.name}`}><header className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-sm font-semibold text-white">{attachment.name}</p><div className="flex items-center gap-2">{isImage && <Button type="button" onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} variant="outline" className="border-white/20 text-white"><Maximize2 size={16} />{Math.round(zoom * 100)}%</Button>}<a href={attachment.dataUrl} download={attachment.name} className="grid h-9 w-9 place-items-center rounded-lg text-slate-200 hover:bg-white/10" aria-label="Baixar"><Download size={18} /></a><IconButton label="Fechar visualização" onClick={() => setExpanded(false)}><X size={19} /></IconButton></div></header><div className="mt-4 flex min-h-0 flex-1 items-center justify-center overflow-auto">{isImage ? <img src={attachment.dataUrl} alt={attachment.name} onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} className="max-h-full max-w-full cursor-zoom-in rounded-xl object-contain transition-transform duration-200" style={{ transform: `scale(${zoom})` }} /> : <video controls autoPlay poster={attachment.previewDataUrl || undefined} src={attachment.dataUrl} className="max-h-full max-w-full rounded-xl" />}</div></div>;
   if (isImage) return <><button type="button" onClick={open} className="mt-2 block max-w-md overflow-hidden rounded-xl border border-white/[.08] text-left"><img src={attachment.dataUrl} alt={attachment.sentAsMessage ? "Mídia enviada" : attachment.name} className="max-h-80 w-full object-cover" />{!attachment.sentAsMessage && <span className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400"><Maximize2 size={14} />{attachment.name}</span>}</button>{viewer}</>;
-  if (attachment.mimeType.startsWith("audio/")) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio controls src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /><a href={attachment.dataUrl} download={attachment.name} className="text-[10px] font-semibold text-violet-300">Baixar</a></div>;
-	  if (isVideo) return <div className="mt-2 max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black"><video controls playsInline preload="metadata" poster={attachment.previewDataUrl || undefined} src={attachment.dataUrl} className="max-h-80 w-full" />{!attachment.sentAsMessage && <div className="flex items-center gap-2 bg-white/[.04] px-3 py-2 text-xs text-slate-400"><FileIcon size={14} /><span className="truncate">{attachment.name}</span></div>}</div>;
+	  if (isAudio) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio controls autoPlay={playRequested} src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /><a href={attachment.dataUrl} download={attachment.name} className="text-[10px] font-semibold text-violet-300">Baixar</a></div>;
+		  if (isVideo) return <div className="mt-2 max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black"><video controls autoPlay={playRequested} playsInline preload="metadata" poster={attachment.previewDataUrl || undefined} src={attachment.dataUrl} className="max-h-80 w-full" />{!attachment.sentAsMessage && <div className="flex items-center gap-2 bg-white/[.04] px-3 py-2 text-xs text-slate-400"><FileIcon size={14} /><span className="truncate">{attachment.name}</span></div>}</div>;
   return <a href={attachment.dataUrl} download={attachment.name} className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><FileIcon size={18} /></span><span className="min-w-0"><span className="block truncate text-xs font-bold">{attachment.name}</span><span className="text-[10px] text-slate-500">{attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : "GIF"} · Baixar</span></span></a>;
 }
 

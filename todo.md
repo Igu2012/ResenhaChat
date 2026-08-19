@@ -161,3 +161,7 @@
 - [x] Mostrar mensagens anteriores do canal para novos membros de um servidor.
 - [x] Recuperar e aplicar imediatamente ao abrir o app as mensagens, servidores, contatos e mudanças feitas enquanto a conta estava fechada.
 - [x] Persistir e recuperar mensagens, contatos, perfil e servidores alterados enquanto a outra sessão da mesma conta estiver fechada.
+- [x] Corrigir a falha atual que interrompeu novamente o salvamento das mensagens no Drive.
+- [x] Corrigir o acesso normal que mostra uma cópia antiga apesar de a guia anônima mostrar as mensagens recentes.
+- [x] Exibir a capa de vídeo enquanto ele carrega e iniciar somente após tocar ou concluir o carregamento.
+- [x] Carregar áudios enviados somente ao tocar para ouvir e manter arquivos como ZIP com download normal.

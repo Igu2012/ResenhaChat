@@ -23,7 +23,7 @@ describe("cofre de conta no Drive", () => {
     const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, revision: 7, snapshot: null }) });
 
     await expect(fetchAccountSnapshot("/api/account/sync", "ana", "token-atual", request)).resolves.toEqual({ revision: 7, snapshot: null });
-    expect(request).toHaveBeenCalledWith("/api/account/sync", expect.objectContaining({ cache: "no-store" }));
+    expect(request).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/account\/sync\?fresh=/), expect.objectContaining({ cache: "no-store" }));
   });
 });
 
