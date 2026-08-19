@@ -12,11 +12,17 @@ describe("reentrada oficial com senha", () => {
     await expect(loginOfficialAccount("/api/account/login", "ana", "errada123", async () => ({ ok: false, json: async () => ({ message: "Senha inválida." }) }))).rejects.toThrow("Senha inválida.");
   });
 
-  it("encaminha dados de cadastro e expõe orientação de configuração devolvida pelo servidor", async () => {
+	it("encaminha dados de cadastro e expõe orientação de configuração devolvida pelo servidor", async () => {
     const request = vi.fn().mockResolvedValue({ ok: false, json: async () => ({ message: "Ative Email/Senha em Firebase Authentication > Sign-in method para criar contas oficiais." }) });
     await expect(registerOfficialAccount("/api/account/register", "ana_1", "senha123", "Ana", request)).rejects.toThrow("Ative Email/Senha");
-    expect(request).toHaveBeenCalledWith("/api/account/register", expect.objectContaining({ body: JSON.stringify({ username: "ana_1", password: "senha123", displayName: "Ana" }) }));
-  });
+	  expect(request).toHaveBeenCalledWith("/api/account/register", expect.objectContaining({ body: JSON.stringify({ username: "ana_1", password: "senha123", displayName: "Ana" }) }));
+	});
+
+	it("encaminha o desafio confirmado junto ao cadastro", async () => {
+	  const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ account: { uid: "official" } }) });
+	  await registerOfficialAccount("/api/account/register", "ana_1", "senha123", "Ana", { token: "desafio", answer: "8" }, request);
+	  expect(request).toHaveBeenCalledWith("/api/account/register", expect.objectContaining({ body: JSON.stringify({ username: "ana_1", password: "senha123", displayName: "Ana", captchaToken: "desafio", captchaAnswer: "8" }) }));
+	});
 
   it("converte falhas de transporte em instrução de rede para login e cadastro", async () => {
     const offline = async () => { throw new TypeError("Failed to fetch"); };

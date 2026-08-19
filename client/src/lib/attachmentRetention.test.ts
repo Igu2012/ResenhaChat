@@ -8,8 +8,8 @@ describe("attachmentRetentionClass", () => {
     expect(attachmentRetentionClass({ name: "video.mp4", mimeType: "video/mp4", size: 10, dataUrl: "data:" })).toBe("media");
   });
 
-  it("marca arquivos comuns para expiração e mensagens sem arquivo como none", () => {
-    expect(attachmentRetentionClass({ name: "arquivo.zip", mimeType: "application/zip", size: 10, dataUrl: "data:" })).toBe("temporary");
-    expect(attachmentRetentionClass(undefined)).toBe("none");
+	it("mantém arquivos comuns e mensagens sem arquivo como none", () => {
+	  expect(attachmentRetentionClass({ name: "arquivo.zip", mimeType: "application/zip", size: 10, dataUrl: "data:" })).toBe("media");
+	  expect(attachmentRetentionClass(undefined)).toBe("none");
   });
 });

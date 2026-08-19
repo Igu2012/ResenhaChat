@@ -145,3 +145,8 @@
 - [x] Salvar e exibir corretamente a capa de vídeo após reabrir a conta.
 - [x] Salvar de forma confiável imagens, vídeos, áudios e arquivos enviados após reabrir a conta.
 - [x] Corrigir o envio de anexos escolhidos da galeria sem afetar imagens e áudios gravados.
+- [x] Permitir selecionar e enviar qualquer arquivo da galeria, incluindo APK, ZIP e EXE.
+- [x] Manter a remoção após 3 dias para arquivos comuns enviados como anexo.
+- [x] Remover a exclusão automática de anexos e manter arquivos guardados.
+- [x] Adicionar CAPTCHA na criação de conta.
+- [x] Limitar o endpoint de login a 3 tentativas por segundo.
