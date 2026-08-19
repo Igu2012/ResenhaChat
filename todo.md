@@ -155,3 +155,8 @@
 - [x] Remover por completo o CAPTCHA do cadastro, incluindo interface, rotas, testes e dependências adicionadas.
 - [x] Corrigir a sincronização da conta que para de gravar mensagens e mídias posteriores no Google Drive.
 - [x] Corrigir a reentrada que reaproveita uma cópia local antiga em vez de aplicar a atualização mais recente do Drive.
+- [x] Atualizar a conta entre celular e PC imediatamente após mensagens, contatos, perfil e mudanças em servidores.
+- [x] Reduzir a demora para que a cópia recente do Drive apareça em outro acesso.
+- [x] Corrigir botões de criar conta e entrar que ignoram toques ou cliques repetidos.
+- [x] Mostrar mensagens anteriores do canal para novos membros de um servidor.
+- [x] Recuperar e aplicar imediatamente ao abrir o app as mensagens, servidores, contatos e mudanças feitas enquanto a conta estava fechada.

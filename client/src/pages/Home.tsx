@@ -359,9 +359,11 @@ export default function Home() {
 	  const typingWasSentRef = useRef(false);
 	  const driveSyncPasswordRef = useRef<string | null>(null);
 	  const driveSyncRevisionRef = useRef(0);
-	  const driveSyncRunningRef = useRef(false);
+		  const driveSyncRunningRef = useRef(false);
 		  const queuedDriveSyncRef = useRef<OrbitStore | null>(null);
 		  const syncedDriveMediaRef = useRef(new Set<string>());
+		  const lastDriveSnapshotRef = useRef<string | null>(null);
+		  const pullingDriveChangesRef = useRef(false);
 	  const storeRef = useRef<OrbitStore>(store);
   const contactIdsRef = useRef<string[]>(store.contacts.map(contact => contact.id));
   const syncContactPresenceRef = useRef<(() => void) | null>(null);
@@ -570,12 +572,13 @@ export default function Home() {
         instance.connect();
       }
     };
-    const recoverAfterResume = () => {
-      if (document.visibilityState === "visible") {
-        noteActivity(true);
-        refreshPresence();
-      }
-    };
+	    const recoverAfterResume = () => {
+	      if (document.visibilityState === "visible") {
+	        noteActivity(true);
+	        refreshPresence();
+	        void pullLatestOfficialStore();
+	      }
+	    };
     const noteInteraction = () => noteActivity();
 	    const retryAfterExhaustion = () => window.setTimeout(() => instance.connect(), 1200);
 	    const refreshAfterConnectionError = () => {
@@ -598,7 +601,7 @@ export default function Home() {
 	      });
 	    };
 	    setSocket(instance);
-	    instance.on("connect", () => { noteActivity(true); refreshPresence(); });
+	    instance.on("connect", () => { noteActivity(true); refreshPresence(); void pullLatestOfficialStore(); });
 	    instance.on("connect_error", refreshAfterConnectionError);
     instance.on("disconnect", reason => {
       if (reason === "io server disconnect") instance.connect();
@@ -645,7 +648,7 @@ export default function Home() {
 	      setActiveRoom(current => current?.partner?.id === updated.id ? { ...current, partner: { ...current.partner, ...updated } } : current);
 	      setViewedProfile(current => current?.id === updated.id ? { ...current, ...updated } : current);
 	    });
-	    const receiveMessage = async (sender: LocalProfile, message: LocalMessage) => {
+		    const receiveMessage = async (sender: LocalProfile, message: LocalMessage) => {
 	      let readable = message;
 	      if (isEncryptedMessage(message.encrypted)) {
 	        try {
@@ -662,10 +665,12 @@ export default function Home() {
 	        const previous = current[readable.roomId] || { count: 0, mentions: 0 };
 	        return { ...current, [readable.roomId]: { count: previous.count + 1, mentions: previous.mentions + (mention ? 1 : 0) } };
 	      });
-	      setStore(current => ({ ...current, contacts: upsertContact(current.contacts, sender), messages: appendMessage(current.messages, readable) }));
-	      notifyIncomingMessage(sender, readable);
-	    };
-	    instance.on("direct:message", ({ sender, message }: { sender: LocalProfile; message: LocalMessage }) => { void receiveMessage(sender, message); });
+		      const ownMessage = sender.id === profileRef.current?.id;
+		      setStore(current => ({ ...current, contacts: ownMessage ? current.contacts : upsertContact(current.contacts, sender), messages: appendMessage(current.messages, readable) }));
+		      if (!ownMessage) notifyIncomingMessage(sender, readable);
+		    };
+		    instance.on("direct:message", ({ sender, message }: { sender: LocalProfile; message: LocalMessage }) => { void receiveMessage(sender, message); });
+		    instance.on("account:changed", () => { void pullLatestOfficialStore(); });
 	    instance.on("group:invite-message", ({ sender, request }: { sender: LocalProfile; request: LocalRequest }) => {
 	      if (!request?.group || !profileRef.current) return;
 	      const roomId = directRoomId(profileRef.current.id, sender.id);
@@ -678,9 +683,9 @@ export default function Home() {
       setStore(current => ({ ...current, groups: current.groups.some(item => item.id === group.id) ? current.groups.map(item => item.id === group.id ? group : item) : [...current.groups, group] }));
 	      toast.success(`Você entrou no servidor ${group.name}.`);
     });
-    instance.on("group:updated", ({ group }: { group: LocalGroup }) => {
-      setStore(current => ({ ...current, groups: current.groups.map(item => item.id === group.id ? group : item) }));
-    });
+	    instance.on("group:updated", ({ group }: { group: LocalGroup }) => {
+	      setStore(current => ({ ...current, groups: current.groups.some(item => item.id === group.id) ? current.groups.map(item => item.id === group.id ? group : item) : [...current.groups, group] }));
+	    });
     instance.on("group:role-updated", ({ groupId, memberId, role }: { groupId: string; memberId: string; role: "admin" | "member" }) => {
       setStore(current => ({ ...current, groups: current.groups.map(group => group.id !== groupId ? group : { ...group, admins: role === "admin" ? Array.from(new Set([...(group.admins || []), memberId])) : (group.admins || []).filter(id => id !== memberId), memberProfiles: { ...(group.memberProfiles || {}), [memberId]: { ...(group.memberProfiles?.[memberId] || {}), role } } }) }));
     });
@@ -721,7 +726,11 @@ export default function Home() {
 	        return { ...current, groups, messages };
 	      });
 	    });
-	    instance.on("group:message", ({ sender, message }: { sender: LocalProfile; message: LocalMessage }) => { void receiveMessage(sender, message); });
+		    instance.on("group:message", ({ sender, message }: { sender: LocalProfile; message: LocalMessage }) => { void receiveMessage(sender, message); });
+		    instance.on("group:history", ({ sender, messages }: { sender: LocalProfile; messages: LocalMessage[] }) => {
+		      if (!Array.isArray(messages)) return;
+		      messages.forEach(message => { void receiveMessage(sender, message); });
+		    });
 	    instance.on("direct:typing", ({ profileId, typing }: { profileId: string; typing: boolean }) => {
 	      if (!profileId || profileId === profileRef.current?.id) return;
 	      const existingTimeout = typingTimeoutsRef.current.get(profileId);
@@ -871,6 +880,31 @@ export default function Home() {
 
 		  const updateStore = (updater: (current: OrbitStore) => OrbitStore) => setStore(updater);
 
+		  const pullLatestOfficialStore = async () => {
+		    const account = profileRef.current;
+		    const password = driveSyncPasswordRef.current;
+		    if (!account || account.accountType !== "official" || !account.authToken || !password || pullingDriveChangesRef.current) return;
+		    pullingDriveChangesRef.current = true;
+		    try {
+		      const remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), account.id, account.authToken);
+		      if (!remoteSnapshot.snapshot || remoteSnapshot.revision <= driveSyncRevisionRef.current) return;
+		      const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
+		      if (!remote.store.profile) return;
+		      try { await restoreStoredKeyPair(account.id, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
+		      driveSyncRevisionRef.current = remoteSnapshot.revision;
+		      const restored = applyOfficialSession(restoreAccountStore(remote.store, storeRef.current), { uid: account.id, username: account.username, idToken: account.authToken });
+		      lastDriveSnapshotRef.current = JSON.stringify(redactOrbitStore(restored));
+		      setStore(restored);
+		      void hydrateDriveMedia(remote.store, password, account.id, account.authToken).then(hydrated => {
+		        setStore(current => current.profile?.id === account.id ? applyOfficialSession(restoreAccountStore(hydrated, current), { uid: account.id, username: account.username, idToken: account.authToken }) : current);
+		      });
+		    } catch (error) {
+		      console.warn("Não foi possível atualizar esta conta agora.", error);
+		    } finally {
+		      pullingDriveChangesRef.current = false;
+		    }
+		  };
+
 		  const hydrateDriveMedia = async (source: OrbitStore, password: string, accountId: string, idToken: string) => {
 		    const messages = Object.fromEntries(await Promise.all(Object.entries(source.messages || {}).map(async ([roomId, list]) => [roomId, await Promise.all(list.map(async message => {
 		      const attachment = message.attachment;
@@ -891,6 +925,7 @@ export default function Home() {
 		      const attachment = message.attachment;
 		      if (!attachment?.dataUrl) return message;
 		      const mediaId = attachment.driveMediaId || `attachment-${message.id}`;
+		      if (attachment.driveMediaId) syncedDriveMediaRef.current.add(mediaId);
 		      if (!syncedDriveMediaRef.current.has(mediaId)) {
 		        const media = await encryptAccountDriveMedia(password, { dataUrl: attachment.dataUrl, previewDataUrl: attachment.previewDataUrl });
 		        await saveAccountMediaToDrive(runtimeApiUrl("/api/account/media"), accountId, idToken, mediaId, media);
@@ -920,6 +955,11 @@ export default function Home() {
 		        let result;
 		        try {
 		          const compactStore = await storeForDrive(next, password, nextAccount.id, nextAccount.authToken);
+		          const compactSignature = JSON.stringify(redactOrbitStore(compactStore));
+		          if (compactSignature === lastDriveSnapshotRef.current) {
+		            next = queuedDriveSyncRef.current;
+		            continue;
+		          }
 		          const snapshot = await encryptAccountSnapshot(password, { store: redactOrbitStore(compactStore), keyPair: exportStoredKeyPair(nextAccount.id) });
 		          result = await saveAccountSnapshotToDrive(runtimeApiUrl("/api/account/sync"), nextAccount.id, nextAccount.authToken, driveSyncRevisionRef.current, snapshot);
 		        } catch (error) {
@@ -928,7 +968,7 @@ export default function Home() {
 		          if (status === 401 && refreshToken && !refreshedForThisRun) {
 		            refreshedForThisRun = true;
 		            const renewed = await refreshOfficialAccount(runtimeApiUrl("/api/account/refresh"), refreshToken);
-		            next = applyOfficialSession(next, renewed);
+		            next = applyOfficialSession(next!, renewed);
 		            setStore(current => current.profile?.id === nextAccount.id ? applyOfficialSession(current, renewed) : current);
 		            continue;
 		          }
@@ -936,6 +976,8 @@ export default function Home() {
 		        }
 		        if (!result.conflict) {
 		          driveSyncRevisionRef.current = result.revision;
+		          lastDriveSnapshotRef.current = JSON.stringify(redactOrbitStore(await storeForDrive(next, password, nextAccount.id, nextAccount.authToken)));
+		          socket?.emit("account:sync");
 		        } else {
 		          driveSyncRevisionRef.current = result.revision;
 		          if (result.snapshot) {
@@ -966,12 +1008,19 @@ export default function Home() {
 	    return () => window.clearTimeout(timer);
 	  }, [store]);
 
-	  useEffect(() => {
-	    const account = store.profile;
-	    if (account?.accountType !== "official" || !account.authToken || !driveSyncPasswordRef.current) return;
-	    const retry = window.setInterval(() => { void syncOfficialStoreToDrive(storeRef.current); }, 20_000);
-	    return () => window.clearInterval(retry);
-	  }, [store.profile?.id, store.profile?.authToken]);
+		  useEffect(() => {
+		    const account = store.profile;
+		    if (account?.accountType !== "official" || !account.authToken || !driveSyncPasswordRef.current) return;
+		    const retry = window.setInterval(() => { void syncOfficialStoreToDrive(storeRef.current); }, 20_000);
+		    return () => window.clearInterval(retry);
+		  }, [store.profile?.id, store.profile?.authToken]);
+
+		  useEffect(() => {
+		    const account = store.profile;
+		    if (account?.accountType !== "official" || !account.authToken || !driveSyncPasswordRef.current) return;
+		    const refresh = window.setInterval(() => { void pullLatestOfficialStore(); }, 5_000);
+		    return () => window.clearInterval(refresh);
+		  }, [store.profile?.id, store.profile?.authToken]);
 
 	  useEffect(() => {
 	    const flushAccountCopy = () => { if (document.visibilityState === "hidden") void syncOfficialStoreToDrive(storeRef.current); };
@@ -1039,6 +1088,7 @@ export default function Home() {
     }
 	    const id = account?.uid || createId();
 	    let remoteStore: OrbitStore | null = null;
+	    let remoteHydration: Promise<OrbitStore> | null = null;
 	    if (account?.idToken) {
 	      driveSyncPasswordRef.current = password;
 	      let remoteSnapshot: Awaited<ReturnType<typeof fetchAccountSnapshot>> | null = null;
@@ -1050,9 +1100,10 @@ export default function Home() {
 	      }
 		      if (remoteSnapshot?.snapshot) {
 		        try {
-		          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
-		          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
-		          remoteStore = await hydrateDriveMedia(remote.store, password, account.uid, account.idToken);
+	          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
+	          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
+	          remoteStore = remote.store;
+	          remoteHydration = hydrateDriveMedia(remote.store, password, account.uid, account.idToken);
 		          try { await restoreStoredKeyPair(account.uid, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
 	        } catch (error) {
 	          console.warn("Não foi possível abrir a cópia da conta.", error);
@@ -1095,6 +1146,9 @@ export default function Home() {
 	    profileRef.current = restoredProfile;
 	    const saved = writeOrbitStore(nextStore);
 	    setStore(saved.store);
+	    if (account && remoteHydration) void remoteHydration.then(hydrated => {
+	      setStore(current => current.profile?.id === account.uid ? applyOfficialSession(restoreAccountStore(hydrated, current), account) : current);
+	    });
 	    if (account) void syncOfficialStoreToDrive(saved.store);
 	    setAccountVault(saveAccountSnapshot(saved.store));
 	    if (!account) {
@@ -1121,6 +1175,7 @@ export default function Home() {
 	      if (!result.idToken) { toast.error("A sessão da conta não foi iniciada corretamente."); return; }
 	      driveSyncPasswordRef.current = password;
 	      let restoredStore = accountStoreForSwitch(record);
+	      let remoteHydration: Promise<OrbitStore> | null = null;
 	      let remoteSnapshot: Awaited<ReturnType<typeof fetchAccountSnapshot>> | null = null;
 	      try {
 	        remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), result.uid, result.idToken);
@@ -1130,10 +1185,11 @@ export default function Home() {
 	      }
 		      if (remoteSnapshot?.snapshot) {
 		        try {
-		          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
-		          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
-		          try { await restoreStoredKeyPair(result.uid, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
-		          restoredStore = await hydrateDriveMedia(remote.store, password, result.uid, result.idToken);
+	          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
+	          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
+	          try { await restoreStoredKeyPair(result.uid, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
+	          restoredStore = remote.store;
+	          remoteHydration = hydrateDriveMedia(remote.store, password, result.uid, result.idToken);
 	        } catch (error) {
 	          console.warn("Não foi possível abrir a cópia da conta.", error);
 	          toast.error("Não foi possível abrir sua conta. Tente novamente.");
@@ -1142,6 +1198,9 @@ export default function Home() {
 	      }
 	      const syncedStore = applyOfficialSession(restoredStore, result);
 	      setStore(syncedStore);
+	      if (remoteHydration) void remoteHydration.then(hydrated => {
+	        setStore(current => current.profile?.id === result.uid ? applyOfficialSession(restoreAccountStore(hydrated, current), result) : current);
+	      });
 	      void syncOfficialStoreToDrive(syncedStore);
 	    } else {
 	      setStore(accountStoreForSwitch(record));
@@ -1241,6 +1300,26 @@ export default function Home() {
     setShowGroup(false);
   };
 
+  const shareGroupHistory = async (target: LocalProfile, group: LocalGroup) => {
+    if (!socket || !profile || !target.encryptionPublicKey) return;
+    const candidates = Object.entries(storeRef.current.messages)
+      .filter(([roomId]) => roomId.startsWith(`channel:${group.id}:`))
+      .flatMap(([, messages]) => messages)
+      .filter(message => !message.deletedAt)
+      .sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt))
+      .slice(-100);
+    const history = [] as LocalMessage[];
+    let attachmentBytes = 0;
+    for (const message of candidates) {
+      const size = message.attachment?.size || 0;
+      if (size && attachmentBytes + size > 12 * 1024 * 1024) continue;
+      const encrypted = await encryptMessageForRecipients(profile.id, [target], { body: message.body, attachment: message.attachment, replyTo: message.replyTo });
+      history.push({ ...message, body: null, attachment: null, encrypted });
+      attachmentBytes += size;
+    }
+    if (history.length) socket.emit("group:history", { recipientId: target.id, groupId: group.id, messages: history });
+  };
+
   const inviteToGroup = async (selectedContacts: LocalProfile[], typedCode: string) => {
     if (!socket || !selectedGroup || !profile) return;
     const targets = new Map<string, LocalProfile | undefined>();
@@ -1254,6 +1333,7 @@ export default function Home() {
       socket.emit("group:invite", { code, contact, group }, (result: { ok: boolean; profile?: LocalProfile; pending?: boolean; message?: string }) => resolve({ contact, result }));
     })));
     const delivered = results.filter(({ result }) => result.ok && result.profile);
+	    await Promise.all(delivered.map(({ result }) => shareGroupHistory(result.profile!, group)));
     delivered.forEach(({ result }) => {
       const target = result.profile!;
       const request: LocalRequest = { id: `group:${profile.id}:${target.id}:${group.id}`, kind: "group", from: profile, group, createdAt: new Date().toISOString() };
@@ -1485,15 +1565,22 @@ function SimplifiedEntryPanel({ onSubmit }: { onSubmit: (event: React.FormEvent<
 }
 
 function OfficialOnlyEntryPanel({ onSubmit }: { onSubmit: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void> }) {
-	  const [intent, setIntent] = useState<"register" | "login">("register");
-	  const [showPassword, setShowPassword] = useState(false);
+		  const [intent, setIntent] = useState<"register" | "login">("register");
+		  const [showPassword, setShowPassword] = useState(false);
+		  const [submitting, setSubmitting] = useState(false);
+		  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+		    event.preventDefault();
+		    if (submitting) return;
+		    setSubmitting(true);
+		    try { await onSubmit(event); } finally { setSubmitting(false); }
+		  };
   const passwordField = (confirmation = false) => <div className="relative mt-2"><Input name={confirmation ? "passwordConfirmation" : "password"} type={showPassword ? "text" : "password"} required minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} pattern={PASSWORD_HTML_PATTERN} autoComplete={intent === "login" ? "current-password" : "new-password"} className="h-11 border-white/[.09] bg-[#11131d] pr-11 text-white" placeholder={confirmation ? "Repita sua senha" : "Senha"} /><button type="button" onClick={() => setShowPassword(value => !value)} className="absolute inset-y-0 right-0 grid w-11 place-items-center text-slate-400 hover:text-white" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>;
   const heading = intent === "register" ? "Crie sua conta." : "Entre na sua conta.";
   const description = intent === "register" ? "Escolha um nome de usuário e uma senha." : "Use seu nome de usuário e senha.";
 
-  return <main className="grid min-h-dvh place-items-center overflow-hidden bg-[#10121a] px-4">
-    <div className="absolute -left-24 -top-28 h-80 w-80 rounded-full bg-violet-600/25 blur-3xl" />
-    <form onSubmit={event => { void onSubmit(event); }} className="orbit-enter relative w-full max-w-[470px] rounded-[28px] border border-white/[.09] bg-[#1c1f2c]/90 p-8 shadow-2xl">
+	  return <main className="grid min-h-dvh place-items-center overflow-hidden bg-[#10121a] px-4">
+	    <div className="pointer-events-none absolute -left-24 -top-28 h-80 w-80 rounded-full bg-violet-600/25 blur-3xl" />
+	    <form noValidate onSubmit={submit} className="orbit-enter relative z-10 w-full max-w-[470px] rounded-[28px] border border-white/[.09] bg-[#1c1f2c]/90 p-8 shadow-2xl">
       <div className="flex items-center gap-3">
         <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#78b43d] text-lg font-black">R</div>
 	        <div><p className="font-bold text-white">Resenha Chat</p></div>
@@ -1507,7 +1594,7 @@ function OfficialOnlyEntryPanel({ onSubmit }: { onSubmit: (event: React.FormEven
       </label>
       <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Senha{passwordField()}</label>
 	      {intent === "register" && <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Repita a senha{passwordField(true)}</label>}
-	      <Button className="mt-6 h-11 w-full rounded-xl bg-violet-500 font-bold hover:bg-violet-400">{intent === "login" ? "Entrar" : "Criar conta"}</Button>
+		      <Button type="submit" disabled={submitting} className="mt-6 h-11 w-full rounded-xl bg-violet-500 font-bold hover:bg-violet-400">{submitting ? "Aguarde" : intent === "login" ? "Entrar" : "Criar conta"}</Button>
       <div className="mt-5 border-t border-white/[.08] pt-4 text-center text-xs text-slate-500">
         {intent === "register" ? <>Já tem uma conta? <button type="button" onClick={() => setIntent("login")} className="font-bold text-violet-300 hover:text-violet-200">Entrar</button></> : <>Ainda não tem conta? <button type="button" onClick={() => setIntent("register")} className="font-bold text-violet-300 hover:text-violet-200">Criar conta</button></>}
       </div>

@@ -33,4 +33,13 @@ describe("criptografia ponta a ponta", () => {
     expect(decrypted.attachment?.name).toBe("nota.txt");
     expect(decrypted.replyTo).toEqual({ id: "mensagem-anterior", authorName: "Bia", preview: "Mensagem anterior" });
   });
+
+  it("inclui um envelope protegido para outra sessão da própria conta", async () => {
+    const aliceKey = await ensureEncryptionPublicKey("alice");
+    const bobKey = await ensureEncryptionPublicKey("bob");
+    const encrypted = await encryptMessageForRecipients("alice", [{ id: "bob", encryptionPublicKey: bobKey }], { body: "sincronizada", attachment: null });
+
+    await expect(decryptMessageForRecipient("alice", aliceKey, encrypted)).resolves.toMatchObject({ body: "sincronizada" });
+    await expect(decryptMessageForRecipient("bob", aliceKey, encrypted)).resolves.toMatchObject({ body: "sincronizada" });
+  });
 });

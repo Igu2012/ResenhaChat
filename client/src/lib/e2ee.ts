@@ -100,7 +100,8 @@ async function encryptForRecipient(profileId: string, recipientPublicKey: JsonWe
 }
 
 export async function encryptMessageForRecipients(profileId: string, recipients: Array<{ id: string; encryptionPublicKey?: JsonWebKey }>, content: ClearMessageContent): Promise<EncryptedMessage> {
-  const uniqueRecipients = Array.from(new Map(recipients.filter(recipient => recipient.id !== profileId).map(recipient => [recipient.id, recipient])).values());
+  const ownRecipient = { id: profileId, encryptionPublicKey: await ensureEncryptionPublicKey(profileId) };
+  const uniqueRecipients = Array.from(new Map([...recipients, ownRecipient].map(recipient => [recipient.id, recipient])).values());
   if (!uniqueRecipients.length) return { version: 1, recipients: {} };
   if (uniqueRecipients.some(recipient => !recipient.encryptionPublicKey)) throw new Error("Um participante ainda não preparou a chave de criptografia. Peça para abrir a versão mais recente da Resenha Chat.");
   const encrypted = await Promise.all(uniqueRecipients.map(async recipient => [recipient.id, await encryptForRecipient(profileId, recipient.encryptionPublicKey!, content)] as const));
