@@ -390,6 +390,7 @@ export default function Home() {
 	  const driveSyncRevisionRef = useRef(0);
 		  const driveSyncRunningRef = useRef(false);
 		  const queuedDriveSyncRef = useRef<OrbitStore | null>(null);
+		  const queuedForcedDriveSyncRef = useRef(false);
 		  const syncedDriveMediaRef = useRef(new Set<string>());
 		  const lastDriveSnapshotRef = useRef<string | null>(null);
 		  const pullingDriveChangesRef = useRef(false);
@@ -1019,28 +1020,34 @@ export default function Home() {
 		    return { ...source, messages };
 		  };
 
-		  const syncOfficialStoreToDrive = async (candidate: OrbitStore) => {
+		  const syncOfficialStoreToDrive = async (candidate: OrbitStore, forceSnapshot = false) => {
 	    const account = candidate.profile;
 	    const password = driveSyncPasswordRef.current;
 	    if (!account || account.accountType !== "official" || !account.authToken || !password) return;
 	    if (driveSyncRunningRef.current) {
 	      queuedDriveSyncRef.current = candidate;
+	      if (forceSnapshot) queuedForcedDriveSyncRef.current = true;
 	      return;
-		    }
+	    }
 		    driveSyncRunningRef.current = true;
 		    let next: OrbitStore | null = candidate;
+		    let forceNextSnapshot = forceSnapshot;
 		    let refreshedForThisRun = false;
 		    try {
 		      while (next) {
 		        queuedDriveSyncRef.current = null;
+		        const forceCurrentSnapshot = forceNextSnapshot || queuedForcedDriveSyncRef.current;
+		        forceNextSnapshot = false;
+		        queuedForcedDriveSyncRef.current = false;
 		        const nextAccount = next.profile;
 		        if (!nextAccount || nextAccount.accountType !== "official" || !nextAccount.authToken) break;
 		        let result;
 		        try {
 		          const compactStore = await storeForDrive(next, password, nextAccount.id, nextAccount.authToken);
 		          const compactSignature = JSON.stringify(redactOrbitStore(compactStore));
-		          if (compactSignature === lastDriveSnapshotRef.current) {
+		          if (!forceCurrentSnapshot && compactSignature === lastDriveSnapshotRef.current) {
 		            next = queuedDriveSyncRef.current;
+		            forceNextSnapshot = queuedForcedDriveSyncRef.current;
 		            continue;
 		          }
 		          const snapshot = await encryptAccountSnapshot(password, { store: redactOrbitStore(compactStore), keyPair: exportStoredKeyPair(nextAccount.id) });
@@ -1069,19 +1076,23 @@ export default function Home() {
 		            const restored = applyOfficialSession(restoreAccountStore(remote.store, next), { uid: nextAccount.id, username: nextAccount.username, idToken: nextAccount.authToken });
 		            setStore(restored);
 		            next = queuedDriveSyncRef.current || restored;
+		            forceNextSnapshot = queuedForcedDriveSyncRef.current;
 	            continue;
 	          }
 	        }
 	        next = queuedDriveSyncRef.current;
+		        forceNextSnapshot = queuedForcedDriveSyncRef.current;
 	      }
 	    } catch (error) {
 	      console.warn("Não foi possível sincronizar a conta no Drive.", error);
-	      window.setTimeout(() => { void syncOfficialStoreToDrive(storeRef.current); }, 1_500);
+	      window.setTimeout(() => { void syncOfficialStoreToDrive(storeRef.current, true); }, 3_000);
 	    } finally {
 	      driveSyncRunningRef.current = false;
 	      const queued = queuedDriveSyncRef.current;
+	      const forceQueued = queuedForcedDriveSyncRef.current;
 	      queuedDriveSyncRef.current = null;
-	      if (queued) void syncOfficialStoreToDrive(queued);
+	      queuedForcedDriveSyncRef.current = false;
+	      if (queued) void syncOfficialStoreToDrive(queued, forceQueued);
 	    }
 	  };
 
@@ -1541,7 +1552,7 @@ export default function Home() {
 	    const outbound: LocalMessage = { ...message, body: null, attachment: null, encrypted };
 	    const storeWithMessage = { ...storeRef.current, messages: appendMessage(storeRef.current.messages, message) };
 	    setStore(storeWithMessage);
-	    void syncOfficialStoreToDrive(storeWithMessage);
+	    void syncOfficialStoreToDrive(storeWithMessage, true);
 	        const attachmentRetention = attachmentRetentionClass(message.attachment);
 		        if (activeRoom.kind === "dm" && activeRoom.partner) socket.emit("direct:message", { recipientId: activeRoom.partner.id, message: outbound, attachmentRetention }, (result: { ok: boolean; message?: string }) => { if (result?.ok) signalSentMessage(); });
 		        if (activeRoom.kind === "channel" && selectedGroup) socket.emit("group:message", { recipientIds: selectedGroup.members.map(member => member.id), groupId: selectedGroup.id, message: outbound, attachmentRetention }, (result: { ok: boolean; message?: string }) => { if (result?.ok) signalSentMessage(); });

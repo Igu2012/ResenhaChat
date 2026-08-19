@@ -178,3 +178,4 @@
 - [x] Corrigir GIFs e vídeos que permanecem carregando e nunca exibem a mídia completa.
 - [x] Manter o botão X acessível no visualizador quando o arquivo tiver nome muito longo.
 - [x] Corrigir o envio de áudio gravado sem alterar o envio de mensagens de texto.
+- [x] Restaurar o salvamento de mensagens no Drive sem alterar o envio de texto e mídia.
