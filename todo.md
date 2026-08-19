@@ -171,3 +171,4 @@
 - [x] Carregar GIFs e vídeos automaticamente de baixo para cima com indicador de carregamento, sem botão ou texto de toque.
 - [x] Dar prioridade à mídia após um segundo visível e acelerar o carregamento quando a pessoa tocar nela.
 - [x] Corrigir o painel de gestão de membros para caber, rolar e manter todos os controles utilizáveis no celular.
+- [x] Medir e reduzir a demora de carregamento entre aplicativo, Render e Drive sem alterar o salvamento já funcional.
