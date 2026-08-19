@@ -166,3 +166,4 @@
 - [x] Exibir a capa de vídeo enquanto ele carrega e iniciar somente após tocar ou concluir o carregamento.
 - [x] Carregar áudios enviados somente ao tocar para ouvir e manter arquivos como ZIP com download normal.
 - [x] Corrigir o envio de uma nova cópia da conta ao mandar mensagens, confirmado pela atualização no Drive.
+- [x] Disparar diretamente e confirmar a cópia no Drive após cada mensagem enviada.

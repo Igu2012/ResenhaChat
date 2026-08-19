@@ -1490,7 +1490,7 @@ export default function Home() {
 	    const outbound: LocalMessage = { ...message, body: null, attachment: null, encrypted };
 	    const storeWithMessage = { ...storeRef.current, messages: appendMessage(storeRef.current.messages, message) };
 	    setStore(storeWithMessage);
-	    if (message.attachment?.dataUrl) void syncOfficialStoreToDrive(storeWithMessage);
+	    void syncOfficialStoreToDrive(storeWithMessage);
 	        const attachmentRetention = attachmentRetentionClass(message.attachment);
 		        if (activeRoom.kind === "dm" && activeRoom.partner) socket.emit("direct:message", { recipientId: activeRoom.partner.id, message: outbound, attachmentRetention }, (result: { ok: boolean; message?: string }) => { if (result?.ok) signalSentMessage(); });
 		        if (activeRoom.kind === "channel" && selectedGroup) socket.emit("group:message", { recipientIds: selectedGroup.members.map(member => member.id), groupId: selectedGroup.id, message: outbound, attachmentRetention }, (result: { ok: boolean; message?: string }) => { if (result?.ok) signalSentMessage(); });
