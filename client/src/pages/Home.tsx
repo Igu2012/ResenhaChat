@@ -43,7 +43,7 @@ import {
 		import { addNativeBackButtonListener, checkForUpdate, exitNativeApp, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
 		import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
 		import { attachmentRetentionClass } from "@/lib/attachmentRetention";
-		import { AUDIO_PRE_RECORD_DELAY_MS, shouldSendHeldAudio } from "@/lib/audioRecording";
+		import { shouldSendHeldAudio } from "@/lib/audioRecording";
 		import { activateExclusiveMedia, clearExclusiveMedia } from "@/lib/exclusiveMediaPlayback";
 		import { clearCachedProfileAvatars, readCachedProfileAvatar, saveCachedProfileAvatar } from "@/lib/profileAvatarCache";
 
@@ -1879,7 +1879,6 @@ function Composer({ value, onChange, attachment, replyTo, editingMessage, onCanc
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recorderStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const holdTimerRef = useRef<number | null>(null);
   const pressingRef = useRef(false);
   const pressStartedAtRef = useRef(0);
   const pressOriginXRef = useRef(0);
@@ -1889,11 +1888,6 @@ function Composer({ value, onChange, attachment, replyTo, editingMessage, onCanc
   const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
   const [showGifPicker, setShowGifPicker] = useState(false);
   const desktopAudioControls = typeof navigator !== "undefined" && !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-
-  const clearHoldTimer = () => {
-    if (holdTimerRef.current !== null) window.clearTimeout(holdTimerRef.current);
-    holdTimerRef.current = null;
-  };
 
   const releaseStream = () => {
     recorderStreamRef.current?.getTracks().forEach(track => track.stop());
@@ -1905,7 +1899,8 @@ function Composer({ value, onChange, attachment, replyTo, editingMessage, onCanc
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       if (!pressingRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
-      const recorder = new MediaRecorder(stream, MediaRecorder.isTypeSupported("audio/webm") ? { mimeType: "audio/webm" } : undefined);
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : undefined;
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       recorderStreamRef.current = stream;
       recorderRef.current = recorder;
       chunksRef.current = [];
@@ -1923,7 +1918,8 @@ function Composer({ value, onChange, attachment, replyTo, editingMessage, onCanc
         }
         void (async () => {
           try {
-            const file = new File([blob], `audio-${Date.now()}.webm`, { type: blob.type });
+            const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+            const file = new File([blob], `audio-${Date.now()}.${extension}`, { type: blob.type });
             onSendMedia({ ...(await fileAsAttachment(file)), recordedInApp: true });
           } catch (error) {
             toast.error(error instanceof Error ? error.message : "Não foi possível preparar o áudio.");
@@ -1948,7 +1944,7 @@ function Composer({ value, onChange, attachment, replyTo, editingMessage, onCanc
     pressStartedAtRef.current = Date.now();
     pressOriginXRef.current = event.clientX;
     setPreparingRecording(true);
-    holdTimerRef.current = window.setTimeout(() => { void beginRecorder(); }, AUDIO_PRE_RECORD_DELAY_MS);
+    void beginRecorder();
   };
 
   const beginDesktopRecording = () => {
@@ -1963,7 +1959,6 @@ function Composer({ value, onChange, attachment, replyTo, editingMessage, onCanc
   const finishPressRecording = (cancelled = false) => {
     if (!pressingRef.current) return;
     pressingRef.current = false;
-    clearHoldTimer();
     shouldSendRef.current = shouldSendHeldAudio(pressStartedAtRef.current, Date.now(), cancelled);
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
     else {
@@ -1983,7 +1978,6 @@ function Composer({ value, onChange, attachment, replyTo, editingMessage, onCanc
   }, [recording]);
 
   useEffect(() => () => {
-    clearHoldTimer();
     pressingRef.current = false;
     shouldSendRef.current = false;
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();

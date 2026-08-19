@@ -177,3 +177,4 @@
 - [x] Manter mídias no cache local e atualizá-las a partir do Drive sempre que a conta estiver conectada.
 - [x] Corrigir GIFs e vídeos que permanecem carregando e nunca exibem a mídia completa.
 - [x] Manter o botão X acessível no visualizador quando o arquivo tiver nome muito longo.
+- [x] Corrigir o envio de áudio gravado sem alterar o envio de mensagens de texto.
