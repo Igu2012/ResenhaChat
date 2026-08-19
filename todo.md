@@ -172,3 +172,5 @@
 - [x] Dar prioridade à mídia após um segundo visível e acelerar o carregamento quando a pessoa tocar nela.
 - [x] Corrigir o painel de gestão de membros para caber, rolar e manter todos os controles utilizáveis no celular.
 - [x] Medir e reduzir a demora de carregamento entre aplicativo, Render e Drive sem alterar o salvamento já funcional.
+- [x] Corrigir vídeo ou áudio que permanece preso em uma cópia local antiga até limpar os dados do aplicativo.
+- [x] Garantir que iniciar um áudio ou vídeo pause qualquer outra mídia que esteja tocando.

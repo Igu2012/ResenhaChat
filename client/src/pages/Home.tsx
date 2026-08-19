@@ -44,15 +44,16 @@ import {
 		import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
 		import { attachmentRetentionClass } from "@/lib/attachmentRetention";
 		import { AUDIO_PRE_RECORD_DELAY_MS, shouldSendHeldAudio } from "@/lib/audioRecording";
+		import { activateExclusiveMedia, clearExclusiveMedia } from "@/lib/exclusiveMediaPlayback";
 		import { clearCachedProfileAvatars, readCachedProfileAvatar, saveCachedProfileAvatar } from "@/lib/profileAvatarCache";
 
 	import { acceptsAttachmentSize, MAX_ATTACHMENT_BYTES } from "../../../shared/attachmentLimits";
 	import { isValidPassword, isValidUsername, PASSWORD_HTML_PATTERN, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordRuleMessage, passwordsMatch, USERNAME_HTML_PATTERN, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, usernameRuleMessage } from "../../../shared/credentials";
 	import { io, type Socket } from "socket.io-client";
 	import { filterInvitableContacts } from "@shared/groupInvites";
-	import { useEffect, useMemo, useRef, useState } from "react";
+	import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
 
-	let requestDriveAttachment: ((attachment: LocalAttachment) => Promise<LocalAttachment | null>) | null = null;
+	let requestDriveAttachment: ((attachment: LocalAttachment, forceRemote?: boolean) => Promise<LocalAttachment | null>) | null = null;
 import {
   Bell,
   Camera,
@@ -961,8 +962,8 @@ export default function Home() {
 		    return { ...source, messages };
 		  };
 
-		  const loadDriveAttachment = async (attachment: LocalAttachment) => {
-		    if (attachment.dataUrl) return attachment;
+		  const loadDriveAttachment = async (attachment: LocalAttachment, forceRemote = false) => {
+		    if (attachment.dataUrl && !forceRemote) return attachment;
 		    const account = storeRef.current.profile;
 		    const password = driveSyncPasswordRef.current;
 		    if (!attachment.driveMediaId || !account || account.accountType !== "official" || !account.authToken || !password) return null;
@@ -1729,11 +1730,31 @@ function AttachmentView({ attachment }: { attachment: LocalAttachment }) {
   const [zoom, setZoom] = useState(1);
   const [loading, setLoading] = useState(false);
   const [playRequested, setPlayRequested] = useState(false);
+  const [mediaReloadKey, setMediaReloadKey] = useState(0);
+  const [recovering, setRecovering] = useState(false);
   const placeholderRef = useRef<HTMLDivElement>(null);
+  const recoveredMediaRef = useRef<string | null>(null);
   const isImage = attachment.mimeType.startsWith("image/");
   const isVideo = attachment.mimeType.startsWith("video/");
   const isAudio = attachment.mimeType.startsWith("audio/");
   const isGif = attachment.mimeType === "image/gif" || attachment.name.toLowerCase().endsWith(".gif");
+  useEffect(() => { recoveredMediaRef.current = null; }, [attachment.driveMediaId]);
+  const handlePlaybackStart = (event: SyntheticEvent<HTMLMediaElement>) => activateExclusiveMedia(event.currentTarget);
+  const handlePlaybackStop = (event: SyntheticEvent<HTMLMediaElement>) => clearExclusiveMedia(event.currentTarget);
+  const reloadFromDrive = async () => {
+    if (!attachment.driveMediaId || recovering || recoveredMediaRef.current === attachment.driveMediaId) return;
+    recoveredMediaRef.current = attachment.driveMediaId;
+    setRecovering(true);
+    try {
+      const refreshed = await requestDriveAttachment?.(attachment, true);
+      if (refreshed?.dataUrl) {
+        setMediaReloadKey(value => value + 1);
+        setPlayRequested(true);
+      }
+    } finally {
+      setRecovering(false);
+    }
+  };
   const load = async (mode: "play" | "download") => {
     if (loading) return;
     setLoading(true);
@@ -1772,12 +1793,12 @@ function AttachmentView({ attachment }: { attachment: LocalAttachment }) {
     if (isAudio) return <button type="button" onClick={() => void load("play")} className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><span className="text-xs text-slate-200">{loading ? "Carregando áudio…" : "Toque para ouvir"}</span></button>;
     return <button type="button" onClick={() => void load("download")} className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><FileIcon size={18} /></span><span className="min-w-0"><span className="block truncate text-xs font-bold">{attachment.name}</span><span className="text-[10px] text-slate-400">{loading ? "Baixando…" : "Baixar"}</span></span></button>;
   }
-  if (isAudio && attachment.recordedInApp) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio controls autoPlay={playRequested} src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /></div>;
+  if (isAudio && attachment.recordedInApp) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio key={mediaReloadKey} controls autoPlay={playRequested} onPlay={handlePlaybackStart} onPause={handlePlaybackStop} onEnded={handlePlaybackStop} onError={() => void reloadFromDrive()} src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /></div>;
   const open = () => { setZoom(1); setExpanded(true); };
-	  const viewer = expanded && <div className="fixed inset-0 z-[70] flex flex-col bg-black/95 p-4" role="dialog" aria-label={`Visualizar ${attachment.name}`}><header className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-sm font-semibold text-white">{attachment.name}</p><div className="flex items-center gap-2">{isImage && <Button type="button" onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} variant="outline" className="border-white/20 text-white"><Maximize2 size={16} />{Math.round(zoom * 100)}%</Button>}<a href={attachment.dataUrl} download={attachment.name} className="grid h-9 w-9 place-items-center rounded-lg text-slate-200 hover:bg-white/10" aria-label="Baixar"><Download size={18} /></a><IconButton label="Fechar visualização" onClick={() => setExpanded(false)}><X size={19} /></IconButton></div></header><div className="mt-4 flex min-h-0 flex-1 items-center justify-center overflow-auto">{isImage ? <img src={attachment.dataUrl} alt={attachment.name} onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} className="max-h-full max-w-full cursor-zoom-in rounded-xl object-contain transition-transform duration-200" style={{ transform: `scale(${zoom})` }} /> : <video controls autoPlay poster={attachment.previewDataUrl || undefined} src={attachment.dataUrl} className="max-h-full max-w-full rounded-xl" />}</div></div>;
+	  const viewer = expanded && <div className="fixed inset-0 z-[70] flex flex-col bg-black/95 p-4" role="dialog" aria-label={`Visualizar ${attachment.name}`}><header className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-sm font-semibold text-white">{attachment.name}</p><div className="flex items-center gap-2">{isImage && <Button type="button" onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} variant="outline" className="border-white/20 text-white"><Maximize2 size={16} />{Math.round(zoom * 100)}%</Button>}<a href={attachment.dataUrl} download={attachment.name} className="grid h-9 w-9 place-items-center rounded-lg text-slate-200 hover:bg-white/10" aria-label="Baixar"><Download size={18} /></a><IconButton label="Fechar visualização" onClick={() => setExpanded(false)}><X size={19} /></IconButton></div></header><div className="mt-4 flex min-h-0 flex-1 items-center justify-center overflow-auto">{isImage ? <img src={attachment.dataUrl} alt={attachment.name} onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} className="max-h-full max-w-full cursor-zoom-in rounded-xl object-contain transition-transform duration-200" style={{ transform: `scale(${zoom})` }} /> : <video key={mediaReloadKey} controls autoPlay onPlay={handlePlaybackStart} onPause={handlePlaybackStop} onEnded={handlePlaybackStop} onError={() => void reloadFromDrive()} poster={attachment.previewDataUrl || undefined} src={attachment.dataUrl} className="max-h-full max-w-full rounded-xl" />}</div></div>;
   if (isImage) return <><button type="button" onClick={open} className="mt-2 block max-w-md overflow-hidden rounded-xl border border-white/[.08] text-left"><img src={attachment.dataUrl} alt={attachment.sentAsMessage ? "Mídia enviada" : attachment.name} className="max-h-80 w-full object-cover" />{!attachment.sentAsMessage && <span className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400"><Maximize2 size={14} />{attachment.name}</span>}</button>{viewer}</>;
-	  if (isAudio) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio controls autoPlay={playRequested} src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /><a href={attachment.dataUrl} download={attachment.name} className="text-[10px] font-semibold text-violet-300">Baixar</a></div>;
-		  if (isVideo) return <div className="mt-2 max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black"><video controls autoPlay={playRequested} playsInline preload="metadata" poster={attachment.previewDataUrl || undefined} src={attachment.dataUrl} className="max-h-80 w-full" />{!attachment.sentAsMessage && <div className="flex items-center gap-2 bg-white/[.04] px-3 py-2 text-xs text-slate-400"><FileIcon size={14} /><span className="truncate">{attachment.name}</span></div>}</div>;
+	  if (isAudio) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio key={mediaReloadKey} controls autoPlay={playRequested} onPlay={handlePlaybackStart} onPause={handlePlaybackStop} onEnded={handlePlaybackStop} onError={() => void reloadFromDrive()} src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /><a href={attachment.dataUrl} download={attachment.name} className="text-[10px] font-semibold text-violet-300">Baixar</a></div>;
+	  if (isVideo) return <div className="mt-2 max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black"><video key={mediaReloadKey} controls autoPlay={playRequested} onPlay={handlePlaybackStart} onPause={handlePlaybackStop} onEnded={handlePlaybackStop} onError={() => void reloadFromDrive()} playsInline preload="metadata" poster={attachment.previewDataUrl || undefined} src={attachment.dataUrl} className="max-h-80 w-full" />{!attachment.sentAsMessage && <div className="flex items-center gap-2 bg-white/[.04] px-3 py-2 text-xs text-slate-400"><FileIcon size={14} /><span className="truncate">{attachment.name}</span></div>}</div>;
   return <a href={attachment.dataUrl} download={attachment.name} className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><FileIcon size={18} /></span><span className="min-w-0"><span className="block truncate text-xs font-bold">{attachment.name}</span><span className="text-[10px] text-slate-500">{attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : "GIF"} · Baixar</span></span></a>;
 }
 
