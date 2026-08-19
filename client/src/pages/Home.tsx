@@ -359,7 +359,8 @@ export default function Home() {
 		  const activeRoomRef = useRef<ActiveRoom | null>(activeRoom);
 	  const typingTimeoutsRef = useRef(new Map<string, number>());
 	  const typingWasSentRef = useRef(false);
-	  const driveSyncPasswordRef = useRef<string | null>(null);
+		  const driveSyncPasswordRef = useRef<string | null>(null);
+		  const [driveSyncReady, setDriveSyncReady] = useState(false);
 	  const driveSyncRevisionRef = useRef(0);
 		  const driveSyncRunningRef = useRef(false);
 		  const queuedDriveSyncRef = useRef<OrbitStore | null>(null);
@@ -511,6 +512,7 @@ export default function Home() {
 		      const savedPassword = await readDriveSyncPassword(profile.id);
 		      if (cancelled || !savedPassword) return;
 		      driveSyncPasswordRef.current = savedPassword;
+		      setDriveSyncReady(true);
 		      if (profileRef.current?.authToken) void pullLatestOfficialStore();
 		    };
 		    const refreshSession = async () => {
@@ -523,6 +525,7 @@ export default function Home() {
 		          const savedPassword = await readDriveSyncPassword(profile.id);
 		          if (!cancelled && savedPassword) {
 		            driveSyncPasswordRef.current = savedPassword;
+		            setDriveSyncReady(true);
 		            void pullLatestOfficialStore();
 		          }
 		        }
@@ -1034,24 +1037,24 @@ export default function Home() {
 	  };
 
 	  useEffect(() => {
-	    if (store.profile?.accountType !== "official" || !driveSyncPasswordRef.current) return;
-	    const timer = window.setTimeout(() => { void syncOfficialStoreToDrive(store); }, 900);
-	    return () => window.clearTimeout(timer);
-	  }, [store]);
+		    if (store.profile?.accountType !== "official" || !driveSyncPasswordRef.current || !driveSyncReady) return;
+		    const timer = window.setTimeout(() => { void syncOfficialStoreToDrive(store); }, 900);
+		    return () => window.clearTimeout(timer);
+		  }, [store, driveSyncReady]);
 
 		  useEffect(() => {
 		    const account = store.profile;
-		    if (account?.accountType !== "official" || !account.authToken || !driveSyncPasswordRef.current) return;
+		    if (account?.accountType !== "official" || !account.authToken || !driveSyncPasswordRef.current || !driveSyncReady) return;
 		    const retry = window.setInterval(() => { void syncOfficialStoreToDrive(storeRef.current); }, 20_000);
 		    return () => window.clearInterval(retry);
-		  }, [store.profile?.id, store.profile?.authToken]);
+		  }, [store.profile?.id, store.profile?.authToken, driveSyncReady]);
 
 		  useEffect(() => {
 		    const account = store.profile;
-		    if (account?.accountType !== "official" || !account.authToken || !driveSyncPasswordRef.current) return;
+		    if (account?.accountType !== "official" || !account.authToken || !driveSyncPasswordRef.current || !driveSyncReady) return;
 		    const refresh = window.setInterval(() => { void pullLatestOfficialStore(); }, 5_000);
 		    return () => window.clearInterval(refresh);
-		  }, [store.profile?.id, store.profile?.authToken]);
+		  }, [store.profile?.id, store.profile?.authToken, driveSyncReady]);
 
 	  useEffect(() => {
 	    const flushAccountCopy = () => { if (document.visibilityState === "hidden") void syncOfficialStoreToDrive(storeRef.current); };
@@ -1122,6 +1125,7 @@ export default function Home() {
 	    let remoteHydration: Promise<OrbitStore> | null = null;
 		    if (account?.idToken) {
 		      driveSyncPasswordRef.current = password;
+		      setDriveSyncReady(true);
 		      void saveDriveSyncPassword(account.uid, password);
 	      let remoteSnapshot: Awaited<ReturnType<typeof fetchAccountSnapshot>> | null = null;
 	      try {
@@ -1203,6 +1207,7 @@ export default function Home() {
 	      catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível entrar nesta conta."); return; }
 	      if (!result.idToken) { toast.error("A sessão da conta não foi iniciada corretamente."); return; }
 		      driveSyncPasswordRef.current = password;
+		      setDriveSyncReady(true);
 		      void saveDriveSyncPassword(result.uid, password);
 	      let restoredStore = accountStoreForSwitch(record);
 	      let remoteHydration: Promise<OrbitStore> | null = null;
