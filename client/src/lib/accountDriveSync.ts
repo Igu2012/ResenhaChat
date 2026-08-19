@@ -59,6 +59,27 @@ export function restoreAccountStore(remote: OrbitStore, local: OrbitStore): Orbi
   return mergeAccountStores(local, remote);
 }
 
+export function mergeHydratedDriveMedia(current: OrbitStore, hydrated: OrbitStore): OrbitStore {
+  const mediaById = new Map<string, NonNullable<LocalMessage["attachment"]>>();
+  for (const messages of Object.values(hydrated.messages || {})) {
+    for (const message of messages) {
+      const attachment = message.attachment;
+      if (attachment?.driveMediaId && attachment.dataUrl) mediaById.set(attachment.driveMediaId, attachment);
+    }
+  }
+  if (!mediaById.size) return current;
+  return {
+    ...current,
+    messages: Object.fromEntries(Object.entries(current.messages || {}).map(([roomId, messages]) => [roomId, messages.map(message => {
+      const attachment = message.attachment;
+      const refreshed = attachment?.driveMediaId ? mediaById.get(attachment.driveMediaId) : null;
+      if (!attachment || !refreshed) return message;
+      const updatedAttachment = { ...attachment, dataUrl: refreshed.dataUrl, previewDataUrl: refreshed.previewDataUrl ?? attachment.previewDataUrl, unavailableOffline: false };
+      return { ...message, attachment: updatedAttachment };
+    })])),
+  };
+}
+
 type SyncReadResponse = { ok: boolean; revision?: number; snapshot?: EncryptedAccountSnapshot | null; message?: string };
 type SyncWriteResponse = SyncReadResponse & { conflict?: boolean };
 type MediaReadResponse = { ok: boolean; media?: EncryptedAccountSnapshot; message?: string };

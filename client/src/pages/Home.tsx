@@ -39,7 +39,7 @@ import {
 	  writeOrbitStore,
 	} from "@/lib/localOrbit";
 		import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, exportStoredKeyPair, isEncryptedMessage, readDriveSyncPassword, restoreStoredKeyPair, saveDriveSyncPassword } from "@/lib/e2ee";
-		import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, fetchAccountMediaFromDrive, fetchAccountSnapshot, restoreAccountStore, saveAccountMediaToDrive, saveAccountSnapshotToDrive } from "@/lib/accountDriveSync";
+		import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, fetchAccountMediaFromDrive, fetchAccountSnapshot, mergeHydratedDriveMedia, restoreAccountStore, saveAccountMediaToDrive, saveAccountSnapshotToDrive } from "@/lib/accountDriveSync";
 		import { addNativeBackButtonListener, checkForUpdate, exitNativeApp, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
 		import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
 		import { attachmentRetentionClass } from "@/lib/attachmentRetention";
@@ -646,7 +646,7 @@ export default function Home() {
 	      });
 	    };
 	    setSocket(instance);
-	    instance.on("connect", () => { noteActivity(true); refreshPresence(); void pullLatestOfficialStore(); });
+	    instance.on("connect", () => { noteActivity(true); refreshPresence(); void pullLatestOfficialStore(true); });
 	    instance.on("connect_error", refreshAfterConnectionError);
     instance.on("disconnect", reason => {
       if (reason === "io server disconnect") instance.connect();
@@ -925,21 +925,26 @@ export default function Home() {
 
 		  const updateStore = (updater: (current: OrbitStore) => OrbitStore) => setStore(updater);
 
-		  const pullLatestOfficialStore = async () => {
+		  const pullLatestOfficialStore = async (refreshMediaCache = false) => {
 		    const account = profileRef.current;
 		    const password = driveSyncPasswordRef.current;
 		    if (!account || account.accountType !== "official" || !account.authToken || !password || pullingDriveChangesRef.current) return;
 		    pullingDriveChangesRef.current = true;
 		    try {
 		      const remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), account.id, account.authToken);
-		      if (!remoteSnapshot.snapshot || remoteSnapshot.revision <= driveSyncRevisionRef.current) return;
+		      if (!remoteSnapshot.snapshot) return;
 		      const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
 		      if (!remote.store.profile) return;
+		      if (remoteSnapshot.revision <= driveSyncRevisionRef.current) {
+		        if (refreshMediaCache) void cacheConnectedDriveMedia(remote.store, password, account.id, account.authToken);
+		        return;
+		      }
 		      try { await restoreStoredKeyPair(account.id, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
 		      driveSyncRevisionRef.current = remoteSnapshot.revision;
 		      const restored = applyOfficialSession(restoreAccountStore(remote.store, storeRef.current), { uid: account.id, username: account.username, idToken: account.authToken });
 		      lastDriveSnapshotRef.current = JSON.stringify(redactOrbitStore(restored));
 		      setStore(restored);
+		      void cacheConnectedDriveMedia(remote.store, password, account.id, account.authToken);
 		    } catch (error) {
 		      console.warn("Não foi possível atualizar esta conta agora.", error);
 		    } finally {
@@ -947,10 +952,10 @@ export default function Home() {
 		    }
 		  };
 
-		  const hydrateDriveMedia = async (source: OrbitStore, password: string, accountId: string, idToken: string) => {
+		  const hydrateDriveMedia = async (source: OrbitStore, password: string, accountId: string, idToken: string, refreshCached = false) => {
 		    const messages = Object.fromEntries(await Promise.all(Object.entries(source.messages || {}).map(async ([roomId, list]) => [roomId, await Promise.all(list.map(async message => {
 		      const attachment = message.attachment;
-		      if (!attachment?.driveMediaId || attachment.dataUrl) return message;
+		      if (!attachment?.driveMediaId || (attachment.dataUrl && !refreshCached)) return message;
 		      try {
 		        const encrypted = await fetchAccountMediaFromDrive(runtimeApiUrl("/api/account/media"), accountId, idToken, attachment.driveMediaId);
 		        const media = await decryptAccountDriveMedia(password, encrypted);
@@ -960,6 +965,16 @@ export default function Home() {
 		      }
 		    }))] as const)));
 		    return { ...source, messages };
+		  };
+
+		  const cacheConnectedDriveMedia = async (source: OrbitStore, password: string, accountId: string, idToken: string) => {
+		    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+		    try {
+		      const hydrated = await hydrateDriveMedia(source, password, accountId, idToken, true);
+		      setStore(current => current.profile?.id === accountId ? mergeHydratedDriveMedia(current, hydrated) : current);
+		    } catch (error) {
+		      console.warn("Não foi possível atualizar as mídias em cache agora.", error);
+		    }
 		  };
 
 		  const loadDriveAttachment = async (attachment: LocalAttachment, forceRemote = false) => {
@@ -1209,6 +1224,7 @@ export default function Home() {
 	    const saved = writeOrbitStore(nextStore);
 	    setStore(saved.store);
 	    if (account) void syncOfficialStoreToDrive(saved.store);
+	    if (account && remoteHydration) void remoteHydration.then(hydrated => setStore(current => current.profile?.id === account.uid ? mergeHydratedDriveMedia(current, hydrated) : current)).catch(error => console.warn("Não foi possível atualizar as mídias em cache agora.", error));
 	    setAccountVault(saveAccountSnapshot(saved.store));
 	    if (!account) {
 	      setActiveRoom(null);
@@ -1260,6 +1276,7 @@ export default function Home() {
 	      const syncedStore = applyOfficialSession(restoredStore, result);
 	      setStore(syncedStore);
 	      void syncOfficialStoreToDrive(syncedStore);
+	      if (remoteHydration) void remoteHydration.then(hydrated => setStore(current => current.profile?.id === result.uid ? mergeHydratedDriveMedia(current, hydrated) : current)).catch(error => console.warn("Não foi possível atualizar as mídias em cache agora.", error));
 	    } else {
 	      setStore(accountStoreForSwitch(record));
 	    }

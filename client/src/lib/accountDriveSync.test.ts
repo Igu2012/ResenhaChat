@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, fetchAccountSnapshot, mergeAccountStores, restoreAccountStore } from "./accountDriveSync";
+import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, fetchAccountSnapshot, mergeAccountStores, mergeHydratedDriveMedia, restoreAccountStore } from "./accountDriveSync";
 
 describe("cofre de conta no Drive", () => {
   it("cifra o snapshot com a senha antes de prepará-lo para sincronização", async () => {
@@ -24,6 +24,16 @@ describe("cofre de conta no Drive", () => {
 
     await expect(fetchAccountSnapshot("/api/account/sync", "ana", "token-atual", request)).resolves.toEqual({ revision: 7, snapshot: null });
     expect(request).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/account\/sync\?fresh=/), expect.objectContaining({ cache: "no-store" }));
+  });
+
+  it("atualiza somente o cache de mídia da conversa sem substituir as mensagens atuais", () => {
+    const profile = { id: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "", avatarUrl: null };
+    const original = { profile, contacts: [], groups: [], requests: [], messages: { geral: [{ id: "m1", roomId: "geral", author: profile, body: "vídeo", attachment: { name: "video.mp4", mimeType: "video/mp4", size: 10, dataUrl: "data:video/mp4;base64,antigo", driveMediaId: "attachment-m1" }, createdAt: "2026-08-19T18:00:00.000Z" }], novo: [{ id: "m2", roomId: "novo", author: profile, body: "não trocar", attachment: null, createdAt: "2026-08-19T18:01:00.000Z" }] } } as never;
+    const hydrated = { ...original, messages: { geral: [{ ...original.messages.geral[0], attachment: { ...original.messages.geral[0].attachment, dataUrl: "data:video/mp4;base64,novo", previewDataUrl: "data:image/jpeg;base64,capa" } }] } } as never;
+
+    const updated = mergeHydratedDriveMedia(original, hydrated);
+    expect(updated.messages.geral[0].attachment?.dataUrl).toBe("data:video/mp4;base64,novo");
+    expect(updated.messages.novo[0].body).toBe("não trocar");
   });
 });
 
