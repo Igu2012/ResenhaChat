@@ -150,3 +150,6 @@
 - [x] Remover a exclusão automática de anexos e manter arquivos guardados.
 - [x] Adicionar CAPTCHA na criação de conta.
 - [x] Limitar o endpoint de login a 3 tentativas por segundo.
+- [x] Não seguir com a substituição da confirmação simples pelo CAPTCHA cap em uma tela central.
+- [x] Não condicionar a criação da conta a um CAPTCHA ou a uma confirmação adicional.
+- [x] Remover por completo o CAPTCHA do cadastro, incluindo interface, rotas, testes e dependências adicionadas.

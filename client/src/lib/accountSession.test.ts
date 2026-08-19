@@ -18,10 +18,10 @@ describe("reentrada oficial com senha", () => {
 	  expect(request).toHaveBeenCalledWith("/api/account/register", expect.objectContaining({ body: JSON.stringify({ username: "ana_1", password: "senha123", displayName: "Ana" }) }));
 	});
 
-	it("encaminha o desafio confirmado junto ao cadastro", async () => {
+	it("envia somente os dados de cadastro, sem confirmação adicional", async () => {
 	  const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ account: { uid: "official" } }) });
-	  await registerOfficialAccount("/api/account/register", "ana_1", "senha123", "Ana", { token: "desafio", answer: "8" }, request);
-	  expect(request).toHaveBeenCalledWith("/api/account/register", expect.objectContaining({ body: JSON.stringify({ username: "ana_1", password: "senha123", displayName: "Ana", captchaToken: "desafio", captchaAnswer: "8" }) }));
+	  await registerOfficialAccount("/api/account/register", "ana_1", "senha123", "Ana", request);
+	  expect(request).toHaveBeenCalledWith("/api/account/register", expect.objectContaining({ body: JSON.stringify({ username: "ana_1", password: "senha123", displayName: "Ana" }) }));
 	});
 
   it("converte falhas de transporte em instrução de rede para login e cadastro", async () => {

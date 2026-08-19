@@ -2,7 +2,6 @@ export type OfficialLogin = { uid: string; username?: string; displayName?: stri
 
 type LoginResponse = { ok: boolean; json: () => Promise<{ account?: OfficialLogin; message?: string }> };
 type AccountRequest = (input: string, init: RequestInit) => Promise<LoginResponse>;
-export type RegistrationCaptcha = { token: string; answer: string };
 
 export async function loginOfficialAccount(endpoint: string, username: string, password: string, request: (input: string, init: RequestInit) => Promise<LoginResponse> = fetch) {
   let response: LoginResponse;
@@ -16,12 +15,10 @@ export async function loginOfficialAccount(endpoint: string, username: string, p
   return result.account;
 }
 
-export async function registerOfficialAccount(endpoint: string, username: string, password: string, displayName: string, captchaOrRequest?: RegistrationCaptcha | AccountRequest, suppliedRequest?: AccountRequest) {
-	const captcha = typeof captchaOrRequest === "function" ? undefined : captchaOrRequest;
-	const request = (typeof captchaOrRequest === "function" ? captchaOrRequest : suppliedRequest) || fetch;
+export async function registerOfficialAccount(endpoint: string, username: string, password: string, displayName: string, request: AccountRequest = fetch) {
   let response: LoginResponse;
   try {
-	    response = await request(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password, displayName, ...(captcha ? { captchaToken: captcha.token, captchaAnswer: captcha.answer } : {}) }) });
+    response = await request(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password, displayName }) });
   } catch {
     throw new Error("Não foi possível alcançar o servidor da Resenha. Verifique sua internet e tente novamente.");
   }

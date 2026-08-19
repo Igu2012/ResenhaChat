@@ -966,16 +966,15 @@ export default function Home() {
 	    const password = String(data.get("password") || "");
 	    const passwordConfirmation = String(data.get("passwordConfirmation") || "");
 	    let account: OfficialLogin | null = null;
-	    if (mode === "official") {
+		    if (mode === "official") {
 		      if (!username || !password) { toast.error("Preencha nome de usuário e senha."); return; }
 		      if (data.get("intent") === "register" && !passwordsMatch(password, passwordConfirmation)) { toast.error("As duas senhas precisam ser iguais."); return; }
-		      if (data.get("intent") === "register" && (!data.get("captchaToken") || !String(data.get("captchaAnswer") || "").trim())) { toast.error("Confirme a conta antes de criar."); return; }
 		      if (!isValidUsername(username)) { toast.error(usernameRuleMessage); return; }
 		      if (!isValidPassword(password)) { toast.error(passwordRuleMessage); return; }
 		      try {
 		        account = data.get("intent") === "login"
 		          ? await loginOfficialAccount(runtimeApiUrl("/api/account/login"), username, password)
-		          : await registerOfficialAccount(runtimeApiUrl("/api/account/register"), username, password, String(data.get("name") || "").trim(), { token: String(data.get("captchaToken") || ""), answer: String(data.get("captchaAnswer") || "") });
+		          : await registerOfficialAccount(runtimeApiUrl("/api/account/register"), username, password, String(data.get("name") || "").trim());
 	      } catch (error) {
 	        toast.error(error instanceof Error ? error.message : "Não foi possível concluir a autenticação.");
 	        return;
@@ -1441,21 +1440,6 @@ function SimplifiedEntryPanel({ onSubmit }: { onSubmit: (event: React.FormEvent<
 function OfficialOnlyEntryPanel({ onSubmit }: { onSubmit: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void> }) {
 	  const [intent, setIntent] = useState<"register" | "login">("register");
 	  const [showPassword, setShowPassword] = useState(false);
-	  const [captcha, setCaptcha] = useState<{ token: string; prompt: string } | null>(null);
-	  const [loadingCaptcha, setLoadingCaptcha] = useState(false);
-	  const loadCaptcha = async () => {
-	    setLoadingCaptcha(true);
-	    try {
-	      const response = await fetch(runtimeApiUrl("/api/account/captcha"));
-	      const data = await response.json() as { token?: unknown; prompt?: unknown };
-	      setCaptcha(response.ok && typeof data.token === "string" && typeof data.prompt === "string" ? { token: data.token, prompt: data.prompt } : null);
-	    } catch {
-	      setCaptcha(null);
-	    } finally {
-	      setLoadingCaptcha(false);
-	    }
-	  };
-	  useEffect(() => { if (intent === "register") void loadCaptcha(); else setCaptcha(null); }, [intent]);
   const passwordField = (confirmation = false) => <div className="relative mt-2"><Input name={confirmation ? "passwordConfirmation" : "password"} type={showPassword ? "text" : "password"} required minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} pattern={PASSWORD_HTML_PATTERN} autoComplete={intent === "login" ? "current-password" : "new-password"} className="h-11 border-white/[.09] bg-[#11131d] pr-11 text-white" placeholder={confirmation ? "Repita sua senha" : "Senha"} /><button type="button" onClick={() => setShowPassword(value => !value)} className="absolute inset-y-0 right-0 grid w-11 place-items-center text-slate-400 hover:text-white" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>;
   const heading = intent === "register" ? "Crie sua conta." : "Entre na sua conta.";
   const description = intent === "register" ? "Escolha um nome de usuário e uma senha." : "Use seu nome de usuário e senha.";
@@ -1476,8 +1460,7 @@ function OfficialOnlyEntryPanel({ onSubmit }: { onSubmit: (event: React.FormEven
       </label>
       <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Senha{passwordField()}</label>
 	      {intent === "register" && <label className="mt-4 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Repita a senha{passwordField(true)}</label>}
-	      {intent === "register" && <div className="mt-4 rounded-xl border border-white/[.09] bg-white/[.03] p-3"><input type="hidden" name="captchaToken" value={captcha?.token || ""} /><div className="flex items-center justify-between gap-3"><label className="text-xs font-bold text-slate-300">Confirmação<span className="mt-1 block font-normal text-slate-400">{captcha?.prompt || (loadingCaptcha ? "Preparando…" : "Não foi possível preparar agora.")}</span></label><button type="button" onClick={() => void loadCaptcha()} className="text-[11px] font-bold text-violet-300 hover:text-violet-200">Trocar</button></div><Input name="captchaAnswer" inputMode="numeric" required disabled={!captcha} className="mt-2 h-10 border-white/[.09] bg-[#11131d] text-white" placeholder="Resposta" /></div>}
-	      <Button disabled={intent === "register" && !captcha} className="mt-6 h-11 w-full rounded-xl bg-violet-500 font-bold hover:bg-violet-400">{intent === "login" ? "Entrar" : "Criar conta"}</Button>
+	      <Button className="mt-6 h-11 w-full rounded-xl bg-violet-500 font-bold hover:bg-violet-400">{intent === "login" ? "Entrar" : "Criar conta"}</Button>
       <div className="mt-5 border-t border-white/[.08] pt-4 text-center text-xs text-slate-500">
         {intent === "register" ? <>Já tem uma conta? <button type="button" onClick={() => setIntent("login")} className="font-bold text-violet-300 hover:text-violet-200">Entrar</button></> : <>Ainda não tem conta? <button type="button" onClick={() => setIntent("register")} className="font-bold text-violet-300 hover:text-violet-200">Criar conta</button></>}
       </div>
