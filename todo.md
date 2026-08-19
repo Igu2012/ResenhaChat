@@ -154,3 +154,4 @@
 - [x] Não condicionar a criação da conta a um CAPTCHA ou a uma confirmação adicional.
 - [x] Remover por completo o CAPTCHA do cadastro, incluindo interface, rotas, testes e dependências adicionadas.
 - [x] Corrigir a sincronização da conta que para de gravar mensagens e mídias posteriores no Google Drive.
+- [x] Corrigir a reentrada que reaproveita uma cópia local antiga em vez de aplicar a atualização mais recente do Drive.

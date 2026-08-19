@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, mergeAccountStores, restoreAccountStore } from "./accountDriveSync";
+import { describe, expect, it, vi } from "vitest";
+import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, fetchAccountSnapshot, mergeAccountStores, restoreAccountStore } from "./accountDriveSync";
 
 describe("cofre de conta no Drive", () => {
   it("cifra o snapshot com a senha antes de prepará-lo para sincronização", async () => {
@@ -17,6 +17,13 @@ describe("cofre de conta no Drive", () => {
 
     expect(JSON.stringify(encrypted)).not.toContain("midia-protegida");
     await expect(decryptAccountDriveMedia("SenhaSegura1", encrypted)).resolves.toEqual(media);
+  });
+
+  it("pede uma cópia nova ao servidor quando a conta é aberta de novo", async () => {
+    const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, revision: 7, snapshot: null }) });
+
+    await expect(fetchAccountSnapshot("/api/account/sync", "ana", "token-atual", request)).resolves.toEqual({ revision: 7, snapshot: null });
+    expect(request).toHaveBeenCalledWith("/api/account/sync", expect.objectContaining({ cache: "no-store" }));
   });
 });
 
