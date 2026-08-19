@@ -941,7 +941,7 @@ export default function Home() {
 		      }
 		      try { await restoreStoredKeyPair(account.id, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
 		      driveSyncRevisionRef.current = remoteSnapshot.revision;
-		      const restored = applyOfficialSession(restoreAccountStore(remote.store, storeRef.current), { uid: account.id, username: account.username, idToken: account.authToken });
+		      const restored = mergeHydratedDriveMedia(applyOfficialSession(restoreAccountStore(remote.store, storeRef.current), { uid: account.id, username: account.username, idToken: account.authToken }), storeRef.current);
 		      lastDriveSnapshotRef.current = JSON.stringify(redactOrbitStore(restored));
 		      setStore(restored);
 		      void cacheConnectedDriveMedia(remote.store, password, account.id, account.authToken);
@@ -953,17 +953,25 @@ export default function Home() {
 		  };
 
 		  const hydrateDriveMedia = async (source: OrbitStore, password: string, accountId: string, idToken: string, refreshCached = false) => {
-		    const messages = Object.fromEntries(await Promise.all(Object.entries(source.messages || {}).map(async ([roomId, list]) => [roomId, await Promise.all(list.map(async message => {
-		      const attachment = message.attachment;
-		      if (!attachment?.driveMediaId || (attachment.dataUrl && !refreshCached)) return message;
-		      try {
-		        const encrypted = await fetchAccountMediaFromDrive(runtimeApiUrl("/api/account/media"), accountId, idToken, attachment.driveMediaId);
-		        const media = await decryptAccountDriveMedia(password, encrypted);
-		        return { ...message, attachment: { ...attachment, dataUrl: media.dataUrl, previewDataUrl: media.previewDataUrl, unavailableOffline: false } };
-		      } catch {
-		        return { ...message, attachment: { ...attachment, unavailableOffline: true } };
+		    const messages: Record<string, LocalMessage[]> = {};
+		    for (const [roomId, list] of Object.entries(source.messages || {})) {
+		      const hydrated: LocalMessage[] = [];
+		      for (const message of list) {
+		        const attachment = message.attachment;
+		        if (!attachment?.driveMediaId || (attachment.dataUrl && !refreshCached)) {
+		          hydrated.push(message);
+		          continue;
+		        }
+		        try {
+		          const encrypted = await fetchAccountMediaFromDrive(runtimeApiUrl("/api/account/media"), accountId, idToken, attachment.driveMediaId);
+		          const media = await decryptAccountDriveMedia(password, encrypted);
+		          hydrated.push({ ...message, attachment: { ...attachment, dataUrl: media.dataUrl, previewDataUrl: media.previewDataUrl, unavailableOffline: false } });
+		        } catch {
+		          hydrated.push({ ...message, attachment: { ...attachment, unavailableOffline: true } });
+		        }
 		      }
-		    }))] as const)));
+		      messages[roomId] = hydrated;
+		    }
 		    return { ...source, messages };
 		  };
 
@@ -1812,7 +1820,17 @@ function AttachmentView({ attachment }: { attachment: LocalAttachment }) {
   }
   if (isAudio && attachment.recordedInApp) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio key={mediaReloadKey} controls autoPlay={playRequested} onPlay={handlePlaybackStart} onPause={handlePlaybackStop} onEnded={handlePlaybackStop} onError={() => void reloadFromDrive()} src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /></div>;
   const open = () => { setZoom(1); setExpanded(true); };
-	  const viewer = expanded && <div className="fixed inset-0 z-[70] flex flex-col bg-black/95 p-4" role="dialog" aria-label={`Visualizar ${attachment.name}`}><header className="flex items-center justify-between gap-3"><p className="min-w-0 truncate text-sm font-semibold text-white">{attachment.name}</p><div className="flex items-center gap-2">{isImage && <Button type="button" onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} variant="outline" className="border-white/20 text-white"><Maximize2 size={16} />{Math.round(zoom * 100)}%</Button>}<a href={attachment.dataUrl} download={attachment.name} className="grid h-9 w-9 place-items-center rounded-lg text-slate-200 hover:bg-white/10" aria-label="Baixar"><Download size={18} /></a><IconButton label="Fechar visualização" onClick={() => setExpanded(false)}><X size={19} /></IconButton></div></header><div className="mt-4 flex min-h-0 flex-1 items-center justify-center overflow-auto">{isImage ? <img src={attachment.dataUrl} alt={attachment.name} onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} className="max-h-full max-w-full cursor-zoom-in rounded-xl object-contain transition-transform duration-200" style={{ transform: `scale(${zoom})` }} /> : <video key={mediaReloadKey} controls autoPlay onPlay={handlePlaybackStart} onPause={handlePlaybackStop} onEnded={handlePlaybackStop} onError={() => void reloadFromDrive()} poster={attachment.previewDataUrl || undefined} src={attachment.dataUrl} className="max-h-full max-w-full rounded-xl" />}</div></div>;
+	  const viewer = expanded && <div className="fixed inset-0 z-[70] flex flex-col bg-black/95 p-4" role="dialog" aria-label={`Visualizar ${attachment.name}`}>
+	    <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+	      <p className="min-w-0 truncate text-sm font-semibold text-white">{attachment.name}</p>
+	      <div className="flex shrink-0 items-center gap-1">
+	        {isImage && <Button type="button" onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} variant="outline" className="hidden h-9 border-white/20 px-3 text-white sm:inline-flex"><Maximize2 size={16} />{Math.round(zoom * 100)}%</Button>}
+	        <a href={attachment.dataUrl} download={attachment.name} className="grid h-9 w-9 place-items-center rounded-lg text-slate-200 hover:bg-white/10" aria-label="Baixar"><Download size={18} /></a>
+	        <IconButton label="Fechar visualização" onClick={() => setExpanded(false)}><X size={19} /></IconButton>
+	      </div>
+	    </header>
+	    <div className="mt-4 flex min-h-0 flex-1 items-center justify-center overflow-auto">{isImage ? <img src={attachment.dataUrl} alt={attachment.name} onClick={() => setZoom(value => value >= 2.5 ? 1 : value + 0.5)} className="max-h-full max-w-full cursor-zoom-in rounded-xl object-contain transition-transform duration-200" style={{ transform: `scale(${zoom})` }} /> : <video key={mediaReloadKey} controls autoPlay onPlay={handlePlaybackStart} onPause={handlePlaybackStop} onEnded={handlePlaybackStop} onError={() => void reloadFromDrive()} poster={attachment.previewDataUrl || undefined} src={attachment.dataUrl} className="max-h-full max-w-full rounded-xl" />}</div>
+	  </div>;
   if (isImage) return <><button type="button" onClick={open} className="mt-2 block max-w-md overflow-hidden rounded-xl border border-white/[.08] text-left"><img src={attachment.dataUrl} alt={attachment.sentAsMessage ? "Mídia enviada" : attachment.name} className="max-h-80 w-full object-cover" />{!attachment.sentAsMessage && <span className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400"><Maximize2 size={14} />{attachment.name}</span>}</button>{viewer}</>;
 	  if (isAudio) return <div className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><audio key={mediaReloadKey} controls autoPlay={playRequested} onPlay={handlePlaybackStart} onPause={handlePlaybackStop} onEnded={handlePlaybackStop} onError={() => void reloadFromDrive()} src={attachment.dataUrl} className="h-9 min-w-0 flex-1" /><a href={attachment.dataUrl} download={attachment.name} className="text-[10px] font-semibold text-violet-300">Baixar</a></div>;
 	  if (isVideo) return <div className="mt-2 max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black"><video key={mediaReloadKey} controls autoPlay={playRequested} onPlay={handlePlaybackStart} onPause={handlePlaybackStop} onEnded={handlePlaybackStop} onError={() => void reloadFromDrive()} playsInline preload="metadata" poster={attachment.previewDataUrl || undefined} src={attachment.dataUrl} className="max-h-80 w-full" />{!attachment.sentAsMessage && <div className="flex items-center gap-2 bg-white/[.04] px-3 py-2 text-xs text-slate-400"><FileIcon size={14} /><span className="truncate">{attachment.name}</span></div>}</div>;

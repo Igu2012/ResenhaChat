@@ -175,3 +175,5 @@
 - [x] Corrigir vídeo ou áudio que permanece preso em uma cópia local antiga até limpar os dados do aplicativo.
 - [x] Garantir que iniciar um áudio ou vídeo pause qualquer outra mídia que esteja tocando.
 - [x] Manter mídias no cache local e atualizá-las a partir do Drive sempre que a conta estiver conectada.
+- [x] Corrigir GIFs e vídeos que permanecem carregando e nunca exibem a mídia completa.
+- [x] Manter o botão X acessível no visualizador quando o arquivo tiver nome muito longo.
