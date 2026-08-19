@@ -38,7 +38,7 @@ import {
 	  voiceRoomId,
 	  writeOrbitStore,
 	} from "@/lib/localOrbit";
-		import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, exportStoredKeyPair, isEncryptedMessage, restoreStoredKeyPair } from "@/lib/e2ee";
+		import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, exportStoredKeyPair, isEncryptedMessage, readDriveSyncPassword, restoreStoredKeyPair, saveDriveSyncPassword } from "@/lib/e2ee";
 		import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, fetchAccountMediaFromDrive, fetchAccountSnapshot, restoreAccountStore, saveAccountMediaToDrive, saveAccountSnapshotToDrive } from "@/lib/accountDriveSync";
 		import { addNativeBackButtonListener, checkForUpdate, exitNativeApp, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile } from "@/lib/nativeRuntime";
 		import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
@@ -500,24 +500,38 @@ export default function Home() {
 	    return () => { cancelled = true; };
 	  }, [profile?.encryptionPublicKey, profile?.id]);
 
-	  useEffect(() => {
-	    if (!profile || profile.accountType !== "official") return;
-	    const refreshToken = readOfficialRefreshToken(profile.id);
-	    if (!refreshToken) return;
-	    let cancelled = false;
-	    const refreshSession = async () => {
+		  useEffect(() => {
+		    if (!profile || profile.accountType !== "official") return;
+		    const refreshToken = readOfficialRefreshToken(profile.id);
+		    if (!refreshToken) return;
+		    let cancelled = false;
+		    const restoreSyncPassword = async () => {
+		      const savedPassword = await readDriveSyncPassword(profile.id);
+		      if (cancelled || !savedPassword) return;
+		      driveSyncPasswordRef.current = savedPassword;
+		      if (profileRef.current?.authToken) void pullLatestOfficialStore();
+		    };
+		    const refreshSession = async () => {
 	      if (refreshingOfficialSessionRef.current === profile.id) return;
 	      refreshingOfficialSessionRef.current = profile.id;
 	      try {
-	        const account = await refreshOfficialAccount(runtimeApiUrl("/api/account/refresh"), refreshToken);
-	        if (!cancelled) setStore(current => current.profile?.id === profile.id ? applyOfficialSession(current, account) : current);
+		        const account = await refreshOfficialAccount(runtimeApiUrl("/api/account/refresh"), refreshToken);
+		        if (!cancelled) {
+		          setStore(current => current.profile?.id === profile.id ? applyOfficialSession(current, account) : current);
+		          const savedPassword = await readDriveSyncPassword(profile.id);
+		          if (!cancelled && savedPassword) {
+		            driveSyncPasswordRef.current = savedPassword;
+		            void pullLatestOfficialStore();
+		          }
+		        }
 	      } catch {
 	        // A conta local permanece aberta e tenta renovar novamente ao recuperar a internet.
 	      } finally {
 	        if (refreshingOfficialSessionRef.current === profile.id) refreshingOfficialSessionRef.current = null;
 	      }
 	    };
-	    if (!profile.authToken) void refreshSession();
+		    void restoreSyncPassword();
+		    if (!profile.authToken) void refreshSession();
 	    const timer = window.setInterval(() => { void refreshSession(); }, 50 * 60 * 1000);
 	    window.addEventListener("online", refreshSession);
 	    return () => {
@@ -1089,8 +1103,9 @@ export default function Home() {
 	    const id = account?.uid || createId();
 	    let remoteStore: OrbitStore | null = null;
 	    let remoteHydration: Promise<OrbitStore> | null = null;
-	    if (account?.idToken) {
-	      driveSyncPasswordRef.current = password;
+		    if (account?.idToken) {
+		      driveSyncPasswordRef.current = password;
+		      void saveDriveSyncPassword(account.uid, password);
 	      let remoteSnapshot: Awaited<ReturnType<typeof fetchAccountSnapshot>> | null = null;
 	      try {
 	        remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), account.uid, account.idToken);
@@ -1173,7 +1188,8 @@ export default function Home() {
 	      try { result = await loginOfficialAccount(runtimeApiUrl("/api/account/login"), record.username, password); }
 	      catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível entrar nesta conta."); return; }
 	      if (!result.idToken) { toast.error("A sessão da conta não foi iniciada corretamente."); return; }
-	      driveSyncPasswordRef.current = password;
+		      driveSyncPasswordRef.current = password;
+		      void saveDriveSyncPassword(result.uid, password);
 	      let restoredStore = accountStoreForSwitch(record);
 	      let remoteHydration: Promise<OrbitStore> | null = null;
 	      let remoteSnapshot: Awaited<ReturnType<typeof fetchAccountSnapshot>> | null = null;

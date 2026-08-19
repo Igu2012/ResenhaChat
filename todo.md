@@ -160,3 +160,4 @@
 - [x] Corrigir botões de criar conta e entrar que ignoram toques ou cliques repetidos.
 - [x] Mostrar mensagens anteriores do canal para novos membros de um servidor.
 - [x] Recuperar e aplicar imediatamente ao abrir o app as mensagens, servidores, contatos e mudanças feitas enquanto a conta estava fechada.
+- [x] Persistir e recuperar mensagens, contatos, perfil e servidores alterados enquanto a outra sessão da mesma conta estiver fechada.

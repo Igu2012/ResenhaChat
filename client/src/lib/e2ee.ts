@@ -1,6 +1,7 @@
 import type { LocalAttachment, LocalReplyReference } from "./localOrbit";
 
 const KEY_STORAGE_PREFIX = "resenha-chat.e2ee.keypair.";
+const DRIVE_PASSWORD_STORAGE_PREFIX = "resenha-chat.drive-password.";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -90,6 +91,31 @@ async function sharedCipher(profileId: string, peerPublicKey: JsonWebKey, usage:
     crypto.subtle.importKey("jwk", peerPublicKey, { name: "ECDH", namedCurve: "P-256" }, true, []),
   ]);
   return crypto.subtle.deriveKey({ name: "ECDH", public: peer }, pair.privateKey, { name: "AES-GCM", length: 256 }, false, usage);
+}
+
+async function deviceStorageCipher(profileId: string, usage: KeyUsage[]) {
+  const pair = await deviceKeyPair(profileId);
+  return crypto.subtle.deriveKey({ name: "ECDH", public: pair.publicKey }, pair.privateKey, { name: "AES-GCM", length: 256 }, false, usage);
+}
+
+export async function saveDriveSyncPassword(profileId: string, password: string) {
+  if (!profileId || !password) return;
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await deviceStorageCipher(profileId, ["encrypt"]);
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, cipher, encoder.encode(password));
+  localStorage.setItem(`${DRIVE_PASSWORD_STORAGE_PREFIX}${profileId}`, JSON.stringify({ iv: bytesToBase64(iv), ciphertext: bytesToBase64(new Uint8Array(encrypted)) }));
+}
+
+export async function readDriveSyncPassword(profileId: string) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(`${DRIVE_PASSWORD_STORAGE_PREFIX}${profileId}`) || "null") as { iv?: string; ciphertext?: string } | null;
+    if (!saved?.iv || !saved.ciphertext) return null;
+    const cipher = await deviceStorageCipher(profileId, ["decrypt"]);
+    const bytes = await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64ToBytes(saved.iv) }, cipher, base64ToBytes(saved.ciphertext));
+    return decoder.decode(bytes) || null;
+  } catch {
+    return null;
+  }
 }
 
 async function encryptForRecipient(profileId: string, recipientPublicKey: JsonWebKey, content: ClearMessageContent): Promise<EncryptedPayload> {

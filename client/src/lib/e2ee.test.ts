@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey } from "./e2ee";
+import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, readDriveSyncPassword, saveDriveSyncPassword } from "./e2ee";
 
 function createLocalStorage() {
   const values = new Map<string, string>();
@@ -41,5 +41,10 @@ describe("criptografia ponta a ponta", () => {
 
     await expect(decryptMessageForRecipient("alice", aliceKey, encrypted)).resolves.toMatchObject({ body: "sincronizada" });
     await expect(decryptMessageForRecipient("bob", aliceKey, encrypted)).resolves.toMatchObject({ body: "sincronizada" });
+  });
+
+  it("recupera a chave de sincronização no mesmo dispositivo", async () => {
+    await saveDriveSyncPassword("alice", "senha-de-sincronizacao");
+    await expect(readDriveSyncPassword("alice")).resolves.toBe("senha-de-sincronizacao");
   });
 });
