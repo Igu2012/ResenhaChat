@@ -154,6 +154,30 @@ function createVideoPreview(dataUrl: string): Promise<string | null> {
   });
 }
 
+function createGifPreview(dataUrl: string): Promise<string | null> {
+  return new Promise(resolve => {
+    const image = new Image();
+    const timer = window.setTimeout(() => resolve(null), 5_000);
+    image.onload = () => {
+      try {
+        const width = Math.min(480, image.naturalWidth || 480);
+        const height = Math.max(1, Math.round(width * (image.naturalHeight || 270) / (image.naturalWidth || 480)));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")?.drawImage(image, 0, 0, width, height);
+        window.clearTimeout(timer);
+        resolve(canvas.toDataURL("image/jpeg", 0.8));
+      } catch {
+        window.clearTimeout(timer);
+        resolve(null);
+      }
+    };
+    image.onerror = () => { window.clearTimeout(timer); resolve(null); };
+    image.src = dataUrl;
+  });
+}
+
 function fileAsAttachment(file: File): Promise<LocalAttachment> {
   return new Promise((resolve, reject) => {
     if (!acceptsAttachmentSize(file.size)) return reject(new Error("No modo local, o arquivo deve ter no máximo 15 MB."));
@@ -162,7 +186,8 @@ function fileAsAttachment(file: File): Promise<LocalAttachment> {
     reader.onload = async () => {
       const dataUrl = String(reader.result);
       const mimeType = file.type || "application/octet-stream";
-      resolve({ name: file.name, mimeType, size: file.size, dataUrl, previewDataUrl: mimeType.startsWith("video/") ? await createVideoPreview(dataUrl) : undefined });
+      const isGif = mimeType === "image/gif" || file.name.toLowerCase().endsWith(".gif");
+      resolve({ name: file.name, mimeType, size: file.size, dataUrl, previewDataUrl: mimeType.startsWith("video/") ? await createVideoPreview(dataUrl) : isGif ? await createGifPreview(dataUrl) : undefined });
     };
     reader.readAsDataURL(file);
   });
@@ -1707,6 +1732,7 @@ function AttachmentView({ attachment }: { attachment: LocalAttachment }) {
   const isImage = attachment.mimeType.startsWith("image/");
   const isVideo = attachment.mimeType.startsWith("video/");
   const isAudio = attachment.mimeType.startsWith("audio/");
+  const isGif = attachment.mimeType === "image/gif" || attachment.name.toLowerCase().endsWith(".gif");
   const load = async (mode: "play" | "download") => {
     if (loading) return;
     setLoading(true);
@@ -1722,6 +1748,7 @@ function AttachmentView({ attachment }: { attachment: LocalAttachment }) {
     }
   };
   if (!attachment.dataUrl) {
+    if (isGif) return <button type="button" onClick={() => void load("play")} className="mt-2 block w-full max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black text-left"><div className="relative grid h-52 place-items-center bg-[#171a25]">{attachment.previewDataUrl ? <img src={attachment.previewDataUrl} alt="Primeira cena do GIF" className="h-full w-full object-cover" /> : <FileIcon size={28} className="text-slate-500" />}<span className="absolute grid h-12 w-12 place-items-center rounded-full bg-white/90 text-lg text-slate-950">▶</span></div><span className="flex items-center gap-2 px-3 py-2 text-xs text-slate-300">{loading ? "Carregando GIF…" : "Toque para ver o GIF"}</span></button>;
     if (isVideo) return <button type="button" onClick={() => void load("play")} className="mt-2 block w-full max-w-lg overflow-hidden rounded-xl border border-white/[.08] bg-black text-left"><div className="relative grid h-52 place-items-center bg-[#171a25]">{attachment.previewDataUrl ? <img src={attachment.previewDataUrl} alt="Capa do vídeo" className="h-full w-full object-cover" /> : <FileIcon size={28} className="text-slate-500" />}<span className="absolute grid h-12 w-12 place-items-center rounded-full bg-white/90 text-lg text-slate-950">▶</span></div><span className="flex items-center gap-2 px-3 py-2 text-xs text-slate-300">{loading ? "Carregando vídeo…" : "Toque para assistir"}</span></button>;
     if (isAudio) return <button type="button" onClick={() => void load("play")} className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><Mic size={18} /></span><span className="text-xs text-slate-200">{loading ? "Carregando áudio…" : "Toque para ouvir"}</span></button>;
     return <button type="button" onClick={() => void load("download")} className="mt-2 flex max-w-sm items-center gap-3 rounded-xl border border-white/[.08] bg-white/[.04] p-3 text-left"><span className="grid h-9 w-9 place-items-center rounded-lg bg-violet-500/20 text-violet-300"><FileIcon size={18} /></span><span className="min-w-0"><span className="block truncate text-xs font-bold">{attachment.name}</span><span className="text-[10px] text-slate-400">{loading ? "Baixando…" : "Baixar"}</span></span></button>;

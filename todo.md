@@ -167,3 +167,4 @@
 - [x] Carregar áudios enviados somente ao tocar para ouvir e manter arquivos como ZIP com download normal.
 - [x] Corrigir o envio de uma nova cópia da conta ao mandar mensagens, confirmado pela atualização no Drive.
 - [x] Disparar diretamente e confirmar a cópia no Drive após cada mensagem enviada.
+- [x] Mostrar a primeira cena como prévia para GIFs enviados como arquivo antes de carregar o GIF completo.
