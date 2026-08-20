@@ -328,8 +328,17 @@ export default function Home() {
 	  });
   const [socket, setSocket] = useState<Socket | null>(null);
   const [activeRoom, setActiveRoom] = useState<ActiveRoom | null>(null);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+	  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+	  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+	  useEffect(() => {
+	    if (!store.profile) return;
+	    const timer = window.setTimeout(() => {
+	      const saved = writeOrbitStore(store);
+	      if (saved.saved) setAccountVault(saveAccountSnapshot(saved.store));
+	    }, 250);
+	    return () => window.clearTimeout(timer);
+	  }, [store]);
 
   useEffect(() => {
     const currentProfile = store.profile;
@@ -702,7 +711,7 @@ export default function Home() {
           readable = { ...message, body: content.body, attachment: content.attachment, replyTo: content.replyTo };
 	        } catch {
 	          toast.error(`Não foi possível abrir a mensagem de ${sender.displayName} neste dispositivo.`);
-	          return;
+	          return false;
 	        }
 	      }
 	      const username = profileRef.current?.username?.toLowerCase();
@@ -714,10 +723,11 @@ export default function Home() {
 		      const ownMessage = sender.id === profileRef.current?.id;
 		      setStore(current => ({ ...current, contacts: ownMessage ? current.contacts : upsertContact(current.contacts, sender), messages: appendMessage(current.messages, readable) }));
 		      if (!ownMessage) notifyIncomingMessage(sender, readable);
+		      return true;
 		    };
 		    instance.on("direct:message", ({ sender, message, pendingDeliveryId }: { sender: LocalProfile; message: LocalMessage; pendingDeliveryId?: string }) => {
-		      void receiveMessage(sender, message).then(() => {
-		        if (pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId });
+		      void receiveMessage(sender, message).then(received => {
+		        if (received && pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId });
 		      });
 		    });
 		    instance.on("account:changed", () => { void pullLatestOfficialStore(); });
@@ -777,8 +787,8 @@ export default function Home() {
 	      });
 	    });
 		    instance.on("group:message", ({ sender, message, pendingDeliveryId }: { sender: LocalProfile; message: LocalMessage; pendingDeliveryId?: string }) => {
-		      void receiveMessage(sender, message).then(() => {
-		        if (pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId });
+		      void receiveMessage(sender, message).then(received => {
+		        if (received && pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId });
 		      });
 		    });
 		    instance.on("group:history", ({ sender, messages }: { sender: LocalProfile; messages: LocalMessage[] }) => {

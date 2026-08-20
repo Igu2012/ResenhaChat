@@ -183,3 +183,5 @@
 - [x] Avaliar uma forma apropriada de reduzir a hibernação do servidor sem alterar o salvamento atual.
 - [x] Identificar uma opção externa confiável para reduzir a hibernação do Render.
 - [x] Corrigir a recuperação de mensagens recebidas enquanto a conta estava off-line sem exigir limpeza de cache.
+- [x] Restaurar o cache de mensagens e mídias que funcionava na versão anterior sem apagar dados existentes.
+- [x] Corrigir a entrega de mensagens enviadas enquanto a conta estava off-line para aparecerem ao reconectar.
