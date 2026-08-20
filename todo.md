@@ -181,3 +181,5 @@
 - [x] Restaurar o salvamento de mensagens no Drive sem alterar o envio de texto e mídia.
 - [x] Sincronizar ao reconectar apenas mensagens, edições, exclusões e reações que ainda não chegaram ao dispositivo.
 - [x] Avaliar uma forma apropriada de reduzir a hibernação do servidor sem alterar o salvamento atual.
+- [x] Identificar uma opção externa confiável para reduzir a hibernação do Render.
+- [x] Corrigir a recuperação de mensagens recebidas enquanto a conta estava off-line sem exigir limpeza de cache.

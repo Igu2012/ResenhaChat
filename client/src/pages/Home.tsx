@@ -715,7 +715,11 @@ export default function Home() {
 		      setStore(current => ({ ...current, contacts: ownMessage ? current.contacts : upsertContact(current.contacts, sender), messages: appendMessage(current.messages, readable) }));
 		      if (!ownMessage) notifyIncomingMessage(sender, readable);
 		    };
-		    instance.on("direct:message", ({ sender, message }: { sender: LocalProfile; message: LocalMessage }) => { void receiveMessage(sender, message); });
+		    instance.on("direct:message", ({ sender, message, pendingDeliveryId }: { sender: LocalProfile; message: LocalMessage; pendingDeliveryId?: string }) => {
+		      void receiveMessage(sender, message).then(() => {
+		        if (pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId });
+		      });
+		    });
 		    instance.on("account:changed", () => { void pullLatestOfficialStore(); });
 	    instance.on("group:invite-message", ({ sender, request }: { sender: LocalProfile; request: LocalRequest }) => {
 	      if (!request?.group || !profileRef.current) return;
@@ -772,7 +776,11 @@ export default function Home() {
 	        return { ...current, groups, messages };
 	      });
 	    });
-		    instance.on("group:message", ({ sender, message }: { sender: LocalProfile; message: LocalMessage }) => { void receiveMessage(sender, message); });
+		    instance.on("group:message", ({ sender, message, pendingDeliveryId }: { sender: LocalProfile; message: LocalMessage; pendingDeliveryId?: string }) => {
+		      void receiveMessage(sender, message).then(() => {
+		        if (pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId });
+		      });
+		    });
 		    instance.on("group:history", ({ sender, messages }: { sender: LocalProfile; messages: LocalMessage[] }) => {
 		      if (!Array.isArray(messages)) return;
 		      messages.forEach(message => { void receiveMessage(sender, message); });
