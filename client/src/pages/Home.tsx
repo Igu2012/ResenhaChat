@@ -936,12 +936,12 @@ export default function Home() {
 		      if (!remoteSnapshot.snapshot) return;
 		      const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
 		      if (!remote.store.profile) return;
-		      if (remoteSnapshot.revision <= driveSyncRevisionRef.current) {
+		      if (remoteSnapshot.revision <= driveSyncRevisionRef.current && !refreshMediaCache) {
 		        if (refreshMediaCache) void cacheConnectedDriveMedia(remote.store, password, account.id, account.authToken);
 		        return;
 		      }
 		      try { await restoreStoredKeyPair(account.id, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
-		      driveSyncRevisionRef.current = remoteSnapshot.revision;
+		      driveSyncRevisionRef.current = Math.max(driveSyncRevisionRef.current, remoteSnapshot.revision);
 		      const restored = mergeHydratedDriveMedia(applyOfficialSession(restoreAccountStore(remote.store, storeRef.current), { uid: account.id, username: account.username, idToken: account.authToken }), storeRef.current);
 		      lastDriveSnapshotRef.current = JSON.stringify(redactOrbitStore(restored));
 		      setStore(restored);

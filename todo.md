@@ -179,3 +179,5 @@
 - [x] Manter o botão X acessível no visualizador quando o arquivo tiver nome muito longo.
 - [x] Corrigir o envio de áudio gravado sem alterar o envio de mensagens de texto.
 - [x] Restaurar o salvamento de mensagens no Drive sem alterar o envio de texto e mídia.
+- [x] Sincronizar ao reconectar apenas mensagens, edições, exclusões e reações que ainda não chegaram ao dispositivo.
+- [x] Avaliar uma forma apropriada de reduzir a hibernação do servidor sem alterar o salvamento atual.

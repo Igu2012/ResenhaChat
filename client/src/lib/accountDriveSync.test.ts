@@ -85,4 +85,15 @@ describe("mergeAccountStores", () => {
     expect(restored.profile).toMatchObject({ connectionCode: "ANA123", avatarUrl: "data:image/png;base64,remota" });
     expect(restored.groups[0].name).toBe("Servidor remoto");
   });
+
+  it("aplica uma edição, exclusão e reações que chegaram pelo Drive ao reconectar", () => {
+    const profile = { id: "ana", connectionCode: "ANA123", displayName: "Ana", bio: "", avatarUrl: null };
+    const previous = { id: "m1", roomId: "dm:ana:bia", author: profile, body: "texto antigo", attachment: null, createdAt: "2026-08-19T20:00:00.000Z", reactions: { "👍": ["ana"] } } as never;
+    const updated = { ...previous, body: null, reactions: { "❤️": ["bia"] }, editedAt: "2026-08-19T20:02:00.000Z", deletedAt: "2026-08-19T20:03:00.000Z", deletedBy: "bia" } as never;
+    const remote = { profile, contacts: [], requests: [], groups: [], messages: { "dm:ana:bia": [updated] } } as never;
+    const local = { profile, contacts: [], requests: [], groups: [], messages: { "dm:ana:bia": [previous] } } as never;
+
+    const restored = restoreAccountStore(remote, local);
+    expect(restored.messages["dm:ana:bia"][0]).toMatchObject({ body: null, deletedAt: updated.deletedAt, editedAt: updated.editedAt, reactions: { "❤️": ["bia"] } });
+  });
 });
