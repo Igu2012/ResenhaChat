@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { addNativeResumeListener, beginNativeCallSession, endNativeCallSession, isNativeRuntime, requestNativeMediaPermission, startNativeScreenCapture, type NativeScreenCapture, updateNativeCallSession } from "@/lib/nativeRuntime";
+import type { DesktopMediaPreferences } from "@/lib/desktopMediaPreferences";
 
 type CallProfile = { id: string; displayName: string; avatarUrl: string | null; availability?: "online" | "away" | "dnd" };
 type RemotePeer = { socketId: string; stream: MediaStream; profile: CallProfile; sharingScreen: boolean };
@@ -40,13 +41,14 @@ function isMobileDevice() {
   return typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
-export function useCall(socket: Socket | null) {
+export function useCall(socket: Socket | null, mediaPreferences?: DesktopMediaPreferences) {
   const peersRef = useRef(new Map<string, RTCPeerConnection>());
   const pendingCandidatesRef = useRef(new Map<string, RTCIceCandidateInit[]>());
   const streamRef = useRef<MediaStream | null>(null);
   const roomRef = useRef<string | null>(null);
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const facingModeRef = useRef<"user" | "environment">("user");
+  const mediaPreferencesRef = useRef<DesktopMediaPreferences>(mediaPreferences || { audioInputId: "", videoInputId: "", audioOutputId: "" });
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
   const cameraWasActiveBeforeShareRef = useRef(false);
   const nativeScreenCaptureRef = useRef<NativeScreenCapture | null>(null);
@@ -68,6 +70,8 @@ export function useCall(socket: Socket | null) {
   const [switchingCamera, setSwitchingCamera] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { mediaPreferencesRef.current = mediaPreferences || { audioInputId: "", videoInputId: "", audioOutputId: "" }; }, [mediaPreferences]);
 
   const restoreCall = useCallback(() => {
     if (roomRef.current) setMinimized(false);
@@ -215,8 +219,9 @@ export function useCall(socket: Socket | null) {
   }, [socket]);
 
   const captureCamera = useCallback(async (facingMode: "user" | "environment", preferredDeviceId?: string, requireFacing = false) => {
+    const selectedCameraId = preferredDeviceId || mediaPreferencesRef.current.videoInputId || undefined;
     const idealVideo: MediaTrackConstraints = {
-      ...(preferredDeviceId ? { deviceId: { exact: preferredDeviceId } } : isMobileDevice() ? { facingMode: { exact: facingMode } } : { facingMode: { ideal: facingMode } }),
+      ...(selectedCameraId ? { deviceId: { exact: selectedCameraId } } : isMobileDevice() ? { facingMode: { exact: facingMode } } : { facingMode: { ideal: facingMode } }),
       width: { ideal: 1280, max: 1920 },
       height: { ideal: 720, max: 1080 },
       frameRate: { ideal: 24, max: 30 },
@@ -283,7 +288,12 @@ export function useCall(socket: Socket | null) {
     if (!socket) throw new Error("A conexão em tempo real ainda não está disponível.");
     let stream: MediaStream;
     let cameraEnabled = withVideo;
-    const audioConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+    const audioConstraints: MediaTrackConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      ...(mediaPreferencesRef.current.audioInputId ? { deviceId: { exact: mediaPreferencesRef.current.audioInputId } } : {}),
+    };
     const nativePermission = await requestNativeMediaPermission({ camera: withVideo, microphone: true });
     if (!nativePermission.microphone) throw new Error("Permita o microfone nas configurações do Android para entrar na chamada.");
     if (withVideo && !nativePermission.camera) {
@@ -293,7 +303,10 @@ export function useCall(socket: Socket | null) {
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
-        video: cameraEnabled ? { facingMode: { ideal: facingModeRef.current }, width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 24, max: 30 } } : false,
+        video: cameraEnabled ? {
+          ...(mediaPreferencesRef.current.videoInputId ? { deviceId: { exact: mediaPreferencesRef.current.videoInputId } } : { facingMode: { ideal: facingModeRef.current } }),
+          width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 24, max: 30 },
+        } : false,
       });
     } catch (error) {
       if (!cameraEnabled) throw error;

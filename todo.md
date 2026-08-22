@@ -185,3 +185,7 @@
 - [x] Corrigir a recuperação de mensagens recebidas enquanto a conta estava off-line sem exigir limpeza de cache.
 - [x] Restaurar o cache de mensagens e mídias que funcionava na versão anterior sem apagar dados existentes.
 - [x] Corrigir a entrega de mensagens enviadas enquanto a conta estava off-line para aparecerem ao reconectar.
+- [x] Substituir o aviso de instalação por uma tela de escolha entre baixar a versão do dispositivo e continuar no navegador.
+- [x] Exibir no Android escolhas claras para versão Android, versão iPhone e continuar na web.
+- [x] Preparar instaladores da Resenha Chat para Windows e Linux com atalho na área de trabalho.
+- [x] Permitir escolher microfone, câmera e saída de áudio nas versões de computador, mantendo notificações.

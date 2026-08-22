@@ -13,7 +13,7 @@ beforeEach(() => {
 
 describe("isNewerVersion", () => {
   it("usa a versão centralizada do pacote de release", () => {
-    expect(APP_VERSION).toBe("1.0.60");
+    expect(APP_VERSION).toBe("1.0.61");
   });
 
   it("identifica uma release semântica mais recente", () => {
@@ -58,11 +58,15 @@ describe("isNewerVersion", () => {
     expect(toPlatformReleaseDownloads(release)).toEqual({
       android: { version: "v1.0.12", url: "https://downloads.example/ResenhaChat.apk" },
       ios: { version: "v1.0.12", url: "https://downloads.example/ResenhaChat.ipa" },
+      windows: { version: "v1.0.12", url: null },
+      linux: { version: "v1.0.12", url: null },
     });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => release }));
     await expect(getLatestPlatformReleaseDownloads()).resolves.toEqual({
       android: { version: "v1.0.12", url: "https://downloads.example/ResenhaChat.apk" },
       ios: { version: "v1.0.12", url: "https://downloads.example/ResenhaChat.ipa" },
+      windows: { version: "v1.0.12", url: null },
+      linux: { version: "v1.0.12", url: null },
     });
   });
 

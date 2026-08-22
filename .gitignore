@@ -10,3 +10,4 @@ android/keystore.properties
 android/*.jks
 *.jks
 *.apk
+release-desktop/
