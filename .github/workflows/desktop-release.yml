@@ -2,6 +2,11 @@ name: Publicar versões de computador
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release que receberá os instaladores
+        required: true
+        default: v1.0.61
   push:
     tags:
       - "v*"
@@ -16,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 10.15.1
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -25,6 +30,7 @@ jobs:
       - run: pnpm desktop:package:windows
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: release-desktop/ResenhaChat-Setup-*.exe
 
   linux:
@@ -33,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 10.15.1
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -42,6 +48,7 @@ jobs:
       - run: pnpm desktop:package:linux
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             release-desktop/ResenhaChat-*.AppImage
             release-desktop/ResenhaChat-*.deb
