@@ -195,3 +195,4 @@
 - [x] Gerar e publicar uma APK Android reemitida, mantendo a APK antiga disponível como versão anterior.
 - [x] Adicionar atualização automática para Windows e Linux com metadados de release.
 - [ ] Assinar e notarizar a versão macOS para habilitar atualização automática no Mac.
+- [x] Substituir o texto superior “Continuar na web” por um botão X na tela de escolha de plataforma.
