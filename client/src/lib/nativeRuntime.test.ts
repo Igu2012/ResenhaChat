@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { APP_VERSION, addNativeBackButtonListener, addNativeResumeListener, beginNativeCallSession, exitNativeApp, getLatestPlatformReleaseDownloads, getLatestReleaseDownload, isNewerVersion, markUpdateDownloadOffered, requestNativeMediaPermission, requestNativeNotificationPermission, shouldOpenUpdateDownload, toPlatformReleaseDownloads, toReleaseDownload } from "./nativeRuntime";
+import { APP_VERSION, addNativeBackButtonListener, addNativeResumeListener, beginNativeCallSession, exitNativeApp, getLatestPlatformReleaseDownloads, getLatestReleaseDownload, isNewerVersion, markUpdateDownloadOffered, requestNativeMediaPermission, requestNativeNotificationPermission, shouldOpenUpdateDownload, toLatestPlatformReleaseDownloads, toPlatformReleaseDownloads, toReleaseDownload } from "./nativeRuntime";
 
 afterEach(() => vi.unstubAllGlobals());
 const storage = new Map<string, string>();
@@ -67,6 +67,18 @@ describe("isNewerVersion", () => {
       ios: { version: "v1.0.12", url: "https://downloads.example/ResenhaChat.ipa" },
       windows: { version: "v1.0.12", url: null },
       linux: { version: "v1.0.12", url: null },
+    });
+  });
+
+  it("usa o último instalador disponível de cada plataforma sem oferecer uma atualização Android inexistente", () => {
+    expect(toLatestPlatformReleaseDownloads([
+      { tag_name: "v1.0.61", assets: [{ name: "ResenhaChat-Setup-1.0.61.exe", browser_download_url: "https://downloads.example/ResenhaChat.exe" }] },
+      { tag_name: "v1.0.60", assets: [{ name: "ResenhaChat.apk", browser_download_url: "https://downloads.example/ResenhaChat.apk" }] },
+    ])).toEqual({
+      android: { version: "v1.0.60", url: "https://downloads.example/ResenhaChat.apk" },
+      ios: { version: "v1.0.61", url: null },
+      windows: { version: "v1.0.61", url: "https://downloads.example/ResenhaChat.exe" },
+      linux: { version: "v1.0.61", url: null },
     });
   });
 

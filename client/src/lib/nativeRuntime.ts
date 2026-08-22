@@ -7,7 +7,7 @@ import type { Socket } from "socket.io-client";
 declare const __RESENHA_APP_VERSION__: string;
 
 export const APP_VERSION = __RESENHA_APP_VERSION__;
-const RELEASES_ENDPOINT = "https://api.github.com/repos/Igu2012/ResenhaChat/releases/latest";
+const RELEASES_ENDPOINT = "https://api.github.com/repos/Igu2012/ResenhaChat/releases";
 const RESENHA_API_ORIGIN = (import.meta.env.VITE_RESENHA_SERVER_URL || "https://resenhudochat.onrender.com").replace(/\/+$/, "");
 const LAST_OFFERED_UPDATE_KEY = "resenha-chat:last-offered-update";
 const PUSH_TOKEN_KEY = "resenha-chat:native-push-token";
@@ -134,10 +134,27 @@ export function toPlatformReleaseDownloads(release: GitHubRelease): PlatformRele
   const linux = release.assets?.find(asset => asset.name?.toLowerCase().endsWith(".appimage"))
     ?? release.assets?.find(asset => asset.name?.toLowerCase().endsWith(".deb"));
   return {
-    android: { version: release.tag_name || null, url: apk?.browser_download_url || release.html_url || null },
+    android: { version: release.tag_name || null, url: apk?.browser_download_url || null },
     ios: { version: release.tag_name || null, url: ipa?.browser_download_url || null },
     windows: { version: release.tag_name || null, url: windows?.browser_download_url || null },
     linux: { version: release.tag_name || null, url: linux?.browser_download_url || null },
+  };
+}
+
+export function toLatestPlatformReleaseDownloads(releases: GitHubRelease[]): PlatformReleaseDownloads {
+  const emptyDownload: ReleaseDownload = { version: releases[0]?.tag_name || null, url: null };
+  const findLatest = (platform: keyof PlatformReleaseDownloads) => {
+    for (const release of releases) {
+      const download = toPlatformReleaseDownloads(release)[platform];
+      if (download.url) return download;
+    }
+    return emptyDownload;
+  };
+  return {
+    android: findLatest("android"),
+    ios: findLatest("ios"),
+    windows: findLatest("windows"),
+    linux: findLatest("linux"),
   };
 }
 
@@ -154,8 +171,8 @@ export async function getLatestPlatformReleaseDownloads() {
   try {
     const response = await fetch(RELEASES_ENDPOINT, { headers: { Accept: "application/vnd.github+json" } });
     if (!response.ok) return null;
-    const release = await response.json() as GitHubRelease;
-    return toPlatformReleaseDownloads(release);
+    const releases = await response.json() as GitHubRelease[] | GitHubRelease;
+    return toLatestPlatformReleaseDownloads(Array.isArray(releases) ? releases : [releases]);
   } catch {
     return null;
   }
