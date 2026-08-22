@@ -640,9 +640,9 @@ export default function Home() {
         instance.emit("presence:activity");
       }
     };
-    const refreshPresence = () => {
-      const latestProfile = profileRef.current;
-      if (!latestProfile) return;
+	    const refreshPresence = () => {
+	      const latestProfile = profileRef.current;
+	      if (!latestProfile) return;
       instance.auth = { profile: latestProfile };
       if (instance.connected) {
         instance.emit("profile:refresh", latestProfile);
@@ -650,10 +650,13 @@ export default function Home() {
         syncContactPresence();
         syncVoiceWatchRef.current?.();
         syncCallWatchRef.current?.();
-      } else {
-        instance.connect();
-      }
-    };
+	      } else {
+	        instance.connect();
+	      }
+	    };
+	    const pullPendingMessages = () => {
+	      if (instance.connected) instance.emit("pending:pull");
+	    };
 		    const recoverAfterResume = () => {
 		      if (document.visibilityState === "visible") {
 		        noteActivity(true);
@@ -867,18 +870,20 @@ export default function Home() {
     window.addEventListener("online", refreshPresence);
     window.addEventListener("focus", recoverAfterResume);
     document.addEventListener("visibilitychange", recoverAfterResume);
-    window.addEventListener("pointerdown", noteInteraction);
-    window.addEventListener("keydown", noteInteraction);
-    window.addEventListener("touchstart", noteInteraction);
-    noteActivity(true);
-    return () => {
+	    window.addEventListener("pointerdown", noteInteraction);
+	    window.addEventListener("keydown", noteInteraction);
+	    window.addEventListener("touchstart", noteInteraction);
+	    const pendingRecoveryTimer = window.setInterval(pullPendingMessages, 12_000);
+	    noteActivity(true);
+	    return () => {
       window.removeEventListener("online", refreshPresence);
       window.removeEventListener("focus", recoverAfterResume);
       document.removeEventListener("visibilitychange", recoverAfterResume);
-      window.removeEventListener("pointerdown", noteInteraction);
-      window.removeEventListener("keydown", noteInteraction);
-      window.removeEventListener("touchstart", noteInteraction);
-      if (activityTimer) window.clearTimeout(activityTimer);
+	      window.removeEventListener("pointerdown", noteInteraction);
+	      window.removeEventListener("keydown", noteInteraction);
+	      window.removeEventListener("touchstart", noteInteraction);
+	      window.clearInterval(pendingRecoveryTimer);
+	      if (activityTimer) window.clearTimeout(activityTimer);
 	      instance.io.off("reconnect_failed", retryAfterExhaustion);
 	      instance.off("connect_error", refreshAfterConnectionError);
       if (syncContactPresenceRef.current === syncContactPresence) syncContactPresenceRef.current = null;

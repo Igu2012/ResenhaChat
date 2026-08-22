@@ -198,3 +198,5 @@
 - [x] Substituir o texto superior “Continuar na web” por um botão X na tela de escolha de plataforma.
 - [x] Corrigir a restauração de mensagens enviadas e recebidas depois de fechar e abrir o aplicativo.
 - [x] Impedir que a descrição do perfil seja apagada durante a sincronização entre aplicativo e servidor.
+- [ ] Garantir que mensagens enviadas para uma pessoa offline sejam guardadas e apareçam quando ela abrir o aplicativo.
+- [ ] Corrigir a recuperação de mensagens offline e dos contatos ao abrir a mesma conta no navegador.
