@@ -15,6 +15,19 @@ export type AccountSyncPayload = {
 
 export type AccountDriveMedia = { dataUrl: string; previewDataUrl?: string | null };
 
+function canonicalizeSnapshotValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeSnapshotValue);
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(Object.keys(record).sort().map(key => [key, canonicalizeSnapshotValue(record[key])]));
+  }
+  return value;
+}
+
+export function stableSnapshotSignature(store: unknown) {
+  return JSON.stringify(canonicalizeSnapshotValue(store));
+}
+
 function uniqueById<T extends { id: string }>(remote: T[], local: T[]) {
   return Array.from(new Map([...remote, ...local].map(item => [item.id, item])).values());
 }

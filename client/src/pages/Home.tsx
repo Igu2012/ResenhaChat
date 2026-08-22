@@ -39,7 +39,7 @@ import {
 	  writeOrbitStore,
 	} from "@/lib/localOrbit";
 		import { decryptMessageForRecipient, encryptMessageForRecipients, ensureEncryptionPublicKey, exportStoredKeyPair, isEncryptedMessage, readDriveSyncPassword, restoreStoredKeyPair, saveDriveSyncPassword } from "@/lib/e2ee";
-		import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, fetchAccountMediaFromDrive, fetchAccountSnapshot, mergeHydratedDriveMedia, restoreAccountStore, saveAccountMediaToDrive, saveAccountSnapshotToDrive } from "@/lib/accountDriveSync";
+			import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, fetchAccountMediaFromDrive, fetchAccountSnapshot, mergeHydratedDriveMedia, restoreAccountStore, saveAccountMediaToDrive, saveAccountSnapshotToDrive, stableSnapshotSignature } from "@/lib/accountDriveSync";
 		import { addNativeBackButtonListener, checkForUpdate, exitNativeApp, getLatestPlatformReleaseDownloads, getRuntimeServerOrigin, isNativeRuntime, markUpdateDownloadOffered, openUpdateDownload, registerNativePush, requestNativeNotificationPermission, runtimeApiUrl, shouldOpenUpdateDownload, subscribeNativePushProfile, type PlatformReleaseDownloads } from "@/lib/nativeRuntime";
 		import { loginOfficialAccount, refreshOfficialAccount, registerOfficialAccount, type OfficialLogin } from "@/lib/accountSession";
 		import { attachmentRetentionClass } from "@/lib/attachmentRetention";
@@ -750,7 +750,8 @@ export default function Home() {
 	      setViewedProfile(current => current?.id === updated.id ? { ...current, ...updated } : current);
 	    });
 		    const receiveMessage = async (sender: LocalProfile, message: LocalMessage) => {
-	      let readable = message;
+		      if (storeRef.current.messages[message.roomId]?.some(existing => existing.id === message.id)) return true;
+		      let readable = message;
 	      if (isEncryptedMessage(message.encrypted)) {
 	        try {
 	          const content = await decryptMessageForRecipient(profileRef.current?.id || "", sender.encryptionPublicKey, message.encrypted);
@@ -844,10 +845,12 @@ export default function Home() {
 	        if (received && pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId, pendingDeliveryKind });
 		      });
 		    });
-		    instance.on("group:history", ({ sender, messages }: { sender: LocalProfile; messages: LocalMessage[] }) => {
-		      if (!Array.isArray(messages)) return;
-		      messages.forEach(message => { void receiveMessage(sender, message); });
-		    });
+	    instance.on("group:history", ({ sender, messages, pendingDeliveryId, pendingDeliveryKind }: { sender: LocalProfile; messages: LocalMessage[]; pendingDeliveryId?: string; pendingDeliveryKind?: "message" }) => {
+	      if (!Array.isArray(messages)) return;
+	      void Promise.all(messages.map(message => receiveMessage(sender, message))).then(received => {
+	        if (received.every(Boolean) && pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId, pendingDeliveryKind });
+	      });
+	    });
 	    instance.on("direct:typing", ({ profileId, typing }: { profileId: string; typing: boolean }) => {
 	      if (!profileId || profileId === profileRef.current?.id) return;
 	      const existingTimeout = typingTimeoutsRef.current.get(profileId);
@@ -1022,7 +1025,7 @@ export default function Home() {
 		      driveSyncRevisionRef.current = Math.max(driveSyncRevisionRef.current, remoteSnapshot.revision);
 		      const restored = mergeHydratedDriveMedia(applyOfficialSession(restoreAccountStore(remote.store, storeRef.current), { uid: account.id, username: account.username, idToken: account.authToken }), storeRef.current);
 		      profileRef.current = restored.profile;
-		      lastDriveSnapshotRef.current = JSON.stringify(redactOrbitStore(restored));
+			      lastDriveSnapshotRef.current = stableSnapshotSignature(redactOrbitStore(restored));
 		      setStore(restored);
 		      void cacheConnectedDriveMedia(remote.store, password, account.id, account.authToken);
 		    } catch (error) {
@@ -1123,7 +1126,7 @@ export default function Home() {
 		        let result;
 		        try {
 		          const compactStore = await storeForDrive(next, password, nextAccount.id, nextAccount.authToken);
-		          const compactSignature = JSON.stringify(redactOrbitStore(compactStore));
+		          const compactSignature = stableSnapshotSignature(redactOrbitStore(compactStore));
 		          if (!forceCurrentSnapshot && compactSignature === lastDriveSnapshotRef.current) {
 		            next = queuedDriveSyncRef.current;
 		            forceNextSnapshot = queuedForcedDriveSyncRef.current;
@@ -1145,7 +1148,7 @@ export default function Home() {
 		        }
 		        if (!result.conflict) {
 		          driveSyncRevisionRef.current = result.revision;
-		          lastDriveSnapshotRef.current = JSON.stringify(redactOrbitStore(await storeForDrive(next, password, nextAccount.id, nextAccount.authToken)));
+		          lastDriveSnapshotRef.current = stableSnapshotSignature(redactOrbitStore(await storeForDrive(next, password, nextAccount.id, nextAccount.authToken)));
 		          socket?.emit("account:sync");
 		        } else {
 		          driveSyncRevisionRef.current = result.revision;
@@ -1262,12 +1265,14 @@ export default function Home() {
       return;
     }
 	    const id = account?.uid || createId();
-	    let remoteStore: OrbitStore | null = null;
-	    let remoteHydration: Promise<OrbitStore> | null = null;
-		    if (account?.idToken) {
-		      driveSyncPasswordRef.current = password;
-		      setDriveSyncReady(true);
-		      void saveDriveSyncPassword(account.uid, password);
+		    let remoteStore: OrbitStore | null = null;
+		    let remoteHydration: Promise<OrbitStore> | null = null;
+			    if (account?.idToken) {
+			      setDriveSyncReady(false);
+			      driveSyncPasswordRef.current = password;
+			      driveSyncRevisionRef.current = 0;
+			      lastDriveSnapshotRef.current = null;
+			      void saveDriveSyncPassword(account.uid, password);
 	      let remoteSnapshot: Awaited<ReturnType<typeof fetchAccountSnapshot>> | null = null;
 	      try {
 	        remoteSnapshot = await fetchAccountSnapshot(runtimeApiUrl("/api/account/sync"), account.uid, account.idToken);
@@ -1299,8 +1304,9 @@ export default function Home() {
 	    if (account?.refreshToken) saveOfficialRefreshToken(account.uid, account.refreshToken);
 	    const next: LocalProfile = { id, accountUid: account?.uid, username: account?.username, authToken: account?.idToken, accountType: account ? "official" : "guest", connectionCode: account ? stableConnectionCode(account.uid) : createConnectionCode(), displayName, bio: String(data.get("bio") || "").trim(), avatarUrl, encryptionPublicKey };
 	    const guestIdBeingMigrated = account && store.profile?.accountType === "guest" ? store.profile.id : null;
-	    const rememberedAccount = account ? readAccountVault().find(record => record.id === account?.uid || record.accountUid === account?.uid || record.username === account?.username) : undefined;
-	    const rememberedStore = remoteStore || (rememberedAccount ? accountStoreForSwitch(rememberedAccount) : guestIdBeingMigrated ? store : createEmptyOrbitStore());
+		    const rememberedAccount = account ? readAccountVault().find(record => record.id === account?.uid || record.accountUid === account?.uid || record.username === account?.username) : undefined;
+		    const localRememberedStore = rememberedAccount ? accountStoreForSwitch(rememberedAccount) : guestIdBeingMigrated ? store : createEmptyOrbitStore();
+		    const rememberedStore = remoteStore ? restoreAccountStore(remoteStore, localRememberedStore) : localRememberedStore;
     const rememberedProfile = rememberedStore.profile;
     const persistedProfile = remoteStore?.profile || rememberedProfile;
     const restoredProfile = persistedProfile && account
@@ -1320,10 +1326,14 @@ export default function Home() {
       }
       : next;
 	    const nextStore = rememberedStore.profile?.accountType === "guest" && account ? migrateGuestToOfficial(rememberedStore, restoredProfile) : { ...rememberedStore, profile: restoredProfile };
-	    profileRef.current = restoredProfile;
-	    const saved = writeOrbitStore(nextStore);
-	    setStore(saved.store);
-	    if (account) void syncOfficialStoreToDrive(saved.store);
+		    profileRef.current = restoredProfile;
+		    const saved = writeOrbitStore(nextStore);
+		    setStore(saved.store);
+		    if (account && remoteStore) lastDriveSnapshotRef.current = stableSnapshotSignature(redactOrbitStore(remoteStore));
+		    if (account) {
+		      setDriveSyncReady(true);
+		      if (!remoteStore || lastDriveSnapshotRef.current !== stableSnapshotSignature(redactOrbitStore(saved.store))) void syncOfficialStoreToDrive(saved.store);
+		    }
 	    if (account && remoteHydration) void remoteHydration.then(hydrated => setStore(current => current.profile?.id === account.uid ? mergeHydratedDriveMedia(current, hydrated) : current)).catch(error => console.warn("Não foi possível atualizar as mídias em cache agora.", error));
 	    setAccountVault(saveAccountSnapshot(saved.store));
 	    if (!account) {
@@ -1341,17 +1351,20 @@ export default function Home() {
 	    setAddingAccount(true);
 	  };
 
-	  const switchAccount = async (record: LocalAccountRecord, password?: string) => {
-	    if (record.accountType === "official") {
+		  const switchAccount = async (record: LocalAccountRecord, password?: string) => {
+		    if (record.accountType === "official") {
 	      if (!record.username || !password) { setSwitchingAccount(record); return; }
 	      let result: OfficialLogin;
 	      try { result = await loginOfficialAccount(runtimeApiUrl("/api/account/login"), record.username, password); }
 	      catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível entrar nesta conta."); return; }
 	      if (!result.idToken) { toast.error("A sessão da conta não foi iniciada corretamente."); return; }
-		      driveSyncPasswordRef.current = password;
-		      setDriveSyncReady(true);
-		      void saveDriveSyncPassword(result.uid, password);
-	      let restoredStore = accountStoreForSwitch(record);
+			      setDriveSyncReady(false);
+			      driveSyncPasswordRef.current = password;
+			      driveSyncRevisionRef.current = 0;
+			      lastDriveSnapshotRef.current = null;
+			      void saveDriveSyncPassword(result.uid, password);
+		      let restoredStore = accountStoreForSwitch(record);
+		      let remoteStore: OrbitStore | null = null;
 	      let remoteHydration: Promise<OrbitStore> | null = null;
 	      let remoteSnapshot: Awaited<ReturnType<typeof fetchAccountSnapshot>> | null = null;
 	      try {
@@ -1362,20 +1375,26 @@ export default function Home() {
 	      }
 		      if (remoteSnapshot?.snapshot) {
 		        try {
-	          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
-	          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
-	          try { await restoreStoredKeyPair(result.uid, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
-	          restoredStore = remote.store;
-	          remoteHydration = hydrateDriveMedia(remote.store, password, result.uid, result.idToken);
+		          const remote = await decryptAccountSnapshot(password, remoteSnapshot.snapshot);
+		          if (!remote.store.profile) throw new Error("A cópia da conta não tem perfil.");
+		          try { await restoreStoredKeyPair(result.uid, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
+		          remoteStore = remote.store;
+		          restoredStore = restoreAccountStore(remote.store, restoredStore);
+		          remoteHydration = hydrateDriveMedia(remote.store, password, result.uid, result.idToken);
 	        } catch (error) {
 	          console.warn("Não foi possível abrir a cópia da conta.", error);
 	          toast.error("Não foi possível abrir sua conta. Tente novamente.");
 	          return;
 	        }
-	      }
-	      const syncedStore = applyOfficialSession(restoredStore, result);
-	      setStore(syncedStore);
-	      void syncOfficialStoreToDrive(syncedStore);
+		      }
+		      const syncedStore = applyOfficialSession(restoredStore, result);
+		      const saved = writeOrbitStore(syncedStore);
+		      profileRef.current = saved.store.profile;
+		      setAccountVault(saveAccountSnapshot(saved.store));
+		      setStore(saved.store);
+		      if (remoteStore) lastDriveSnapshotRef.current = stableSnapshotSignature(redactOrbitStore(remoteStore));
+		      setDriveSyncReady(true);
+		      if (!remoteStore || lastDriveSnapshotRef.current !== stableSnapshotSignature(redactOrbitStore(saved.store))) void syncOfficialStoreToDrive(saved.store);
 	      if (remoteHydration) void remoteHydration.then(hydrated => setStore(current => current.profile?.id === result.uid ? mergeHydratedDriveMedia(current, hydrated) : current)).catch(error => console.warn("Não foi possível atualizar as mídias em cache agora.", error));
 	    } else {
 	      setStore(accountStoreForSwitch(record));

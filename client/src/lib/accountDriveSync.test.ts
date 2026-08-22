@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, fetchAccountSnapshot, mergeAccountStores, mergeHydratedDriveMedia, restoreAccountStore } from "./accountDriveSync";
+import { decryptAccountDriveMedia, decryptAccountSnapshot, encryptAccountDriveMedia, encryptAccountSnapshot, fetchAccountSnapshot, mergeAccountStores, mergeHydratedDriveMedia, restoreAccountStore, stableSnapshotSignature } from "./accountDriveSync";
+import { applyOfficialSession, redactOrbitStore } from "./localOrbit";
 
 describe("cofre de conta no Drive", () => {
   it("cifra o snapshot com a senha antes de prepará-lo para sincronização", async () => {
@@ -84,6 +85,16 @@ describe("mergeAccountStores", () => {
 
     expect(restored.profile).toMatchObject({ connectionCode: "ANA123", avatarUrl: "data:image/png;base64,remota" });
     expect(restored.groups[0].name).toBe("Servidor remoto");
+  });
+
+  it("mantém a mesma assinatura após restaurar do Drive e inserir somente a sessão atual", () => {
+    const profile = { id: "ana", accountUid: "ana", username: "Ana", accountType: "official" as const, connectionCode: "ANA123", displayName: "Ana", bio: "Perfil salvo", avatarUrl: "data:image/png;base64,avatar" };
+    const bia = { id: "bia", connectionCode: "BIA123", displayName: "Bia", bio: "", avatarUrl: null };
+    const remote = { profile, contacts: [bia], requests: [], groups: [], messages: { "dm:ana:bia": [{ id: "m1", roomId: "dm:ana:bia", author: bia, body: "Mensagem", attachment: null, createdAt: "2026-08-20T12:00:00.000Z" }] }, unreadRooms: { "dm:ana:bia": { count: 1, mentions: 0 } } } as never;
+    const emptyDevice = { profile: null, contacts: [], groups: [], requests: [], messages: {}, unreadRooms: {} } as never;
+
+    const restored = applyOfficialSession(restoreAccountStore(remote, emptyDevice), { uid: "ana", username: "Ana", idToken: "sessão-atual" });
+    expect(stableSnapshotSignature(redactOrbitStore(restored))).toBe(stableSnapshotSignature(redactOrbitStore(remote)));
   });
 
   it("aplica uma edição, exclusão e reações que chegaram pelo Drive ao reconectar", () => {
