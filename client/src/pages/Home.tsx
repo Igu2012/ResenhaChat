@@ -696,9 +696,9 @@ export default function Home() {
     instance.on("disconnect", reason => {
       if (reason === "io server disconnect") instance.connect();
     });
-    instance.io.on("reconnect_failed", retryAfterExhaustion);
+	    instance.io.on("reconnect_failed", retryAfterExhaustion);
 	    instance.on("contact:added", (contact: LocalProfile) => {
-	      setStore(current => ({ ...current, contacts: upsertContact(current.contacts, contact), outgoingRequests: (current.outgoingRequests || []).filter(request => request.to.id !== contact.id) }));
+	      persistAccountChangeNow(current => ({ ...current, contacts: upsertContact(current.contacts, contact), outgoingRequests: (current.outgoingRequests || []).filter(request => request.to.id !== contact.id) }));
 	      toast.success(`${contact.displayName} adicionou você aos contatos.`);
 	    });
 	    instance.on("contact:request-resolved", ({ requestId }: { requestId: string }) => {
@@ -709,7 +709,7 @@ export default function Home() {
 	    });
     const receiveRequest = (request: LocalRequest) => {
       if (!request?.id || !request.from) return;
-      setStore(current => current.requests.some(item => item.id === request.id) ? current : { ...current, requests: [...current.requests, request] });
+	      persistAccountChangeNow(current => current.requests.some(item => item.id === request.id) ? current : { ...current, requests: [...current.requests, request] });
       setShowRequests(true);
       const text = request.kind === "contact" ? `${request.from.displayName} quer adicionar você.` : `${request.from.displayName} enviou um convite de grupo.`;
       toast.info(text);
@@ -1169,7 +1169,15 @@ export default function Home() {
 	    }
 	  };
 
-	  useEffect(() => {
+		  const persistAccountChangeNow = (updater: (current: OrbitStore) => OrbitStore) => {
+		    const saved = writeOrbitStore(updater(storeRef.current));
+		    if (saved.store.profile) setAccountVault(saveAccountSnapshot(saved.store));
+		    setStore(saved.store);
+		    void syncOfficialStoreToDrive(saved.store, true);
+		    return saved.store;
+		  };
+
+		  useEffect(() => {
 		    if (store.profile?.accountType !== "official" || !driveSyncPasswordRef.current || !driveSyncReady) return;
 		    const timer = window.setTimeout(() => { void syncOfficialStoreToDrive(store); }, 900);
 		    return () => window.clearTimeout(timer);
@@ -1383,44 +1391,44 @@ export default function Home() {
 	    toast.success("Você saiu desta conta neste dispositivo.");
 	  };
 
-	  const addContact = (code: string) => {
-	    if (!socket?.connected) { toast.error("Conectando. Tente novamente em instantes."); return; }
-	    socket.emit("contact:add", { code }, (result: { ok: boolean; profile?: LocalProfile; request?: { id: string; createdAt: string }; pending?: boolean; message?: string }) => {
-	      if (!result.ok || !result.profile) { toast.error(result.message || "Não foi possível enviar a solicitação."); return; }
-	      if (result.request) {
-	        const sentRequest = result.request;
-	        const target = result.profile;
-	        updateStore(current => ({ ...current, outgoingRequests: [...(current.outgoingRequests || []).filter(request => request.id !== sentRequest.id), { id: sentRequest.id, kind: "contact", to: target, createdAt: sentRequest.createdAt }] }));
+		  const addContact = (code: string) => {
+		    if (!socket?.connected) { toast.error("Conectando. Tente novamente em instantes."); return; }
+		    socket.emit("contact:add", { code }, (result: { ok: boolean; profile?: LocalProfile; request?: { id: string; createdAt: string }; pending?: boolean; message?: string }) => {
+		      if (!result.ok || !result.profile) { toast.error(result.message || "Não foi possível enviar a solicitação."); return; }
+		      if (result.request) {
+		        const sentRequest = result.request;
+		        const target = result.profile;
+		        persistAccountChangeNow(current => ({ ...current, outgoingRequests: [...(current.outgoingRequests || []).filter(request => request.id !== sentRequest.id), { id: sentRequest.id, kind: "contact", to: target, createdAt: sentRequest.createdAt }] }));
 	      }
 	      toast.success(`Solicitação enviada para ${result.profile.displayName}.`);
 	      setShowContact(false);
 	    });
   };
 
-	  const addContactByUsername = (username: string) => {
-	    if (!socket?.connected) { toast.error("Conectando. Tente novamente em instantes."); return; }
-	    socket.emit("contact:add-username", { username }, (result: { ok: boolean; profile?: LocalProfile; request?: { id: string; createdAt: string }; message?: string }) => {
-	      if (!result.ok || !result.profile) { toast.error(result.message || "Nome de usuário não encontrado."); return; }
-	      if (result.request) {
-	        const sentRequest = result.request;
-	        const target = result.profile;
-	        updateStore(current => ({ ...current, outgoingRequests: [...(current.outgoingRequests || []).filter(request => request.id !== sentRequest.id), { id: sentRequest.id, kind: "contact", to: target, createdAt: sentRequest.createdAt }] }));
+		  const addContactByUsername = (username: string) => {
+		    if (!socket?.connected) { toast.error("Conectando. Tente novamente em instantes."); return; }
+		    socket.emit("contact:add-username", { username }, (result: { ok: boolean; profile?: LocalProfile; request?: { id: string; createdAt: string }; message?: string }) => {
+		      if (!result.ok || !result.profile) { toast.error(result.message || "Nome de usuário não encontrado."); return; }
+		      if (result.request) {
+		        const sentRequest = result.request;
+		        const target = result.profile;
+		        persistAccountChangeNow(current => ({ ...current, outgoingRequests: [...(current.outgoingRequests || []).filter(request => request.id !== sentRequest.id), { id: sentRequest.id, kind: "contact", to: target, createdAt: sentRequest.createdAt }] }));
 	      }
 	      toast.success(`Solicitação enviada para ${result.profile.displayName}.`);
 	      setShowContact(false);
 	    });
 	  };
 
-	  const cancelOutgoingRequest = (request: LocalOutgoingRequest) => {
-	    if (!socket?.connected) return;
-	    socket.emit("contact:cancel", { targetId: request.to.id, requestId: request.id }, (result: { ok: boolean }) => {
-	      if (result?.ok) updateStore(current => ({ ...current, outgoingRequests: (current.outgoingRequests || []).filter(item => item.id !== request.id) }));
+		  const cancelOutgoingRequest = (request: LocalOutgoingRequest) => {
+		    if (!socket?.connected) return;
+		    socket.emit("contact:cancel", { targetId: request.to.id, requestId: request.id }, (result: { ok: boolean }) => {
+		      if (result?.ok) persistAccountChangeNow(current => ({ ...current, outgoingRequests: (current.outgoingRequests || []).filter(item => item.id !== request.id) }));
 	    });
 	  };
 
-  const resolveRequest = (request: LocalRequest, accepted: boolean) => {
-    if (!socket || !profile) return;
-    socket.emit("contact:resolve", { request, accepted });
+	  const resolveRequest = (request: LocalRequest, accepted: boolean) => {
+	    if (!socket || !profile) return;
+	    socket.emit("contact:resolve", { request, accepted });
     if (accepted && request.kind === "group" && request.group) {
       const joiningGroup: LocalGroup = { ...request.group, members: [...request.group.members.filter(member => member.id !== profile.id), profile] };
       socket.emit("group:join", { group: joiningGroup }, (result: { ok: boolean; group?: LocalGroup; message?: string }) => {
@@ -1428,7 +1436,7 @@ export default function Home() {
         setStore(current => ({ ...current, groups: current.groups.some(group => group.id === result.group!.id) ? current.groups.map(group => group.id === result.group!.id ? result.group! : group) : [...current.groups, result.group!] }));
       });
     }
-    updateStore(current => {
+	    persistAccountChangeNow(current => {
       if (!accepted) return { ...current, requests: current.requests.filter(item => item.id !== request.id) };
       if (request.kind === "contact") return { ...current, contacts: upsertContact(current.contacts, request.from), requests: current.requests.filter(item => item.id !== request.id) };
       if (!request.group) return { ...current, requests: current.requests.filter(item => item.id !== request.id) };

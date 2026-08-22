@@ -200,3 +200,5 @@
 - [x] Impedir que a descrição do perfil seja apagada durante a sincronização entre aplicativo e servidor.
 - [ ] Garantir que mensagens enviadas para uma pessoa offline sejam guardadas e apareçam quando ela abrir o aplicativo.
 - [ ] Corrigir a recuperação de mensagens offline e dos contatos ao abrir a mesma conta no navegador.
+- [ ] Verificar a estrutura da mensagem offline criptografada para identificar por que ela não aparece no destino.
+- [ ] Corrigir a cópia de conta para que contatos e mensagens persistam junto da foto de perfil entre aplicativo e navegador.
