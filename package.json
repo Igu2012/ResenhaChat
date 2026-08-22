@@ -21,9 +21,9 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "desktop:run": "pnpm build && electron .",
-    "desktop:package": "pnpm build && electron-builder",
-    "desktop:package:windows": "pnpm build && electron-builder --win nsis --x64",
-    "desktop:package:linux": "pnpm build && electron-builder --linux AppImage deb --x64"
+    "desktop:package": "pnpm build && electron-builder --publish never",
+    "desktop:package:windows": "pnpm build && electron-builder --win nsis --x64 --publish never",
+    "desktop:package:linux": "pnpm build && electron-builder --linux AppImage deb --x64 --publish never"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
