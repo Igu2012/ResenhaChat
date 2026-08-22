@@ -707,7 +707,7 @@ export default function Home() {
 	    instance.on("contact:request-cancelled", ({ requestId }: { requestId: string }) => {
 	      setStore(current => ({ ...current, requests: current.requests.filter(request => request.id !== requestId) }));
 	    });
-    const receiveRequest = (request: LocalRequest) => {
+	    const receiveRequest = (request: LocalRequest) => {
       if (!request?.id || !request.from) return;
 	      persistAccountChangeNow(current => current.requests.some(item => item.id === request.id) ? current : { ...current, requests: [...current.requests, request] });
       setShowRequests(true);
@@ -715,8 +715,14 @@ export default function Home() {
       toast.info(text);
       notifyBackgroundActivity(request.kind === "contact" ? "Nova solicitação de contato" : "Novo convite de grupo", text, `resenha-request-${request.id}`);
     };
-    instance.on("contact:request", ({ request }: { request: LocalRequest }) => receiveRequest(request));
-    instance.on("group:request", ({ request }: { request: LocalRequest }) => receiveRequest(request));
+	    instance.on("contact:request", ({ request, pendingDeliveryId, pendingDeliveryKind }: { request: LocalRequest; pendingDeliveryId?: string; pendingDeliveryKind?: "request" }) => {
+	      receiveRequest(request);
+	      if (pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId, pendingDeliveryKind });
+	    });
+	    instance.on("group:request", ({ request, pendingDeliveryId, pendingDeliveryKind }: { request: LocalRequest; pendingDeliveryId?: string; pendingDeliveryKind?: "request" }) => {
+	      receiveRequest(request);
+	      if (pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId, pendingDeliveryKind });
+	    });
     instance.on("contact:presence", ({ profileId, online, status }: { profileId: string; online: boolean; status?: "online" | "away" }) => {
       if (typeof profileId !== "string" || typeof online !== "boolean") return;
       setOnlineContactIds(current => {
@@ -768,13 +774,13 @@ export default function Home() {
 		      if (!ownMessage) notifyIncomingMessage(sender, readable);
 		      return true;
 		    };
-		    instance.on("direct:message", ({ sender, message, pendingDeliveryId }: { sender: LocalProfile; message: LocalMessage; pendingDeliveryId?: string }) => {
-		      void receiveMessage(sender, message).then(received => {
-		        if (received && pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId });
+	    instance.on("direct:message", ({ sender, message, pendingDeliveryId, pendingDeliveryKind }: { sender: LocalProfile; message: LocalMessage; pendingDeliveryId?: string; pendingDeliveryKind?: "message" }) => {
+	      void receiveMessage(sender, message).then(received => {
+	        if (received && pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId, pendingDeliveryKind });
 		      });
 		    });
 		    instance.on("account:changed", () => { void pullLatestOfficialStore(); });
-	    instance.on("group:invite-message", ({ sender, request }: { sender: LocalProfile; request: LocalRequest }) => {
+	    instance.on("group:invite-message", ({ sender, request, pendingDeliveryId, pendingDeliveryKind }: { sender: LocalProfile; request: LocalRequest; pendingDeliveryId?: string; pendingDeliveryKind?: "message" }) => {
 	      if (!request?.group || !profileRef.current) return;
 	      const roomId = directRoomId(profileRef.current.id, sender.id);
 	      const inviteMessage: LocalMessage = { id: `invite:${request.id}`, roomId, author: sender, body: null, attachment: null, createdAt: request.createdAt, groupInvite: request };
@@ -783,6 +789,7 @@ export default function Home() {
 	      const persisted = persistStoreImmediately({ ...current, contacts: upsertContact(current.contacts, sender), messages: appendMessage(current.messages, inviteMessage) });
 	      setStore(persisted);
 	      void syncOfficialStoreToDrive(persisted, true);
+	      if (pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId, pendingDeliveryKind });
 	      toast.info(`${sender.displayName} enviou um convite de servidor na conversa.`);
 	    });
     instance.on("group:invited", ({ group }: { group: LocalGroup }) => {
@@ -832,9 +839,9 @@ export default function Home() {
 	        return { ...current, groups, messages };
 	      });
 	    });
-		    instance.on("group:message", ({ sender, message, pendingDeliveryId }: { sender: LocalProfile; message: LocalMessage; pendingDeliveryId?: string }) => {
-		      void receiveMessage(sender, message).then(received => {
-		        if (received && pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId });
+	    instance.on("group:message", ({ sender, message, pendingDeliveryId, pendingDeliveryKind }: { sender: LocalProfile; message: LocalMessage; pendingDeliveryId?: string; pendingDeliveryKind?: "message" }) => {
+	      void receiveMessage(sender, message).then(received => {
+	        if (received && pendingDeliveryId) instance.emit("pending:ack", { pendingDeliveryId, pendingDeliveryKind });
 		      });
 		    });
 		    instance.on("group:history", ({ sender, messages }: { sender: LocalProfile; messages: LocalMessage[] }) => {

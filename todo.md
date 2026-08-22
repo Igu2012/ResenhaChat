@@ -202,3 +202,4 @@
 - [ ] Corrigir a recuperação de mensagens offline e dos contatos ao abrir a mesma conta no navegador.
 - [ ] Verificar a estrutura da mensagem offline criptografada para identificar por que ela não aparece no destino.
 - [ ] Corrigir a cópia de conta para que contatos e mensagens persistam junto da foto de perfil entre aplicativo e navegador.
+- [ ] Confirmar solicitações e mensagens offline somente depois que o aplicativo destinatário gravar os dados com sucesso.
