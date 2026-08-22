@@ -1,5 +1,6 @@
 {
   "name": "resenha-chat-client",
+  "desktopName": "resenha-chat",
   "version": "1.0.61",
   "private": true,
   "type": "module",
@@ -104,6 +105,7 @@
         }
       ],
       "category": "Network",
+      "syncDesktopName": true,
       "artifactName": "ResenhaChat-${version}.${ext}"
     }
   }

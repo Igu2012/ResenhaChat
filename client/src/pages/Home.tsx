@@ -394,9 +394,7 @@ export default function Home() {
   const [managedMember, setManagedMember] = useState<LocalProfile | null>(null);
   const [voiceChannelTitle, setVoiceChannelTitle] = useState<string | null>(null);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(() => browserNotificationPermission());
-		  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
 		  const [isInstalled, setIsInstalled] = useState(false);
-			  const [mobilePlatform, setMobilePlatform] = useState<"android" | "ios" | null>(null);
 			  const [mobileReleaseUrl, setMobileReleaseUrl] = useState<string | null>(null);
 			  const [iosReleaseUrl, setIosReleaseUrl] = useState<string | null>(null);
 			  const [showIosInstallHelp, setShowIosInstallHelp] = useState(false);
@@ -477,7 +475,6 @@ export default function Home() {
 		    const standalone = window.matchMedia?.("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 		    const detected: InstallPlatform = isAndroidBrowser ? "android" : isIosBrowser ? "ios" : /Windows/i.test(navigator.userAgent) ? "windows" : /Linux/i.test(navigator.userAgent) ? "linux" : "desktop";
 		    setIsInstalled(standalone || native || isDesktopApp);
-		    setMobilePlatform(isAndroidBrowser ? "android" : isIosBrowser ? "ios" : null);
 		    setInstallPlatform(detected);
 		    try { setShowPlatformChoice(!standalone && !native && !isDesktopApp && sessionStorage.getItem("resenha-chat.platform-choice.v1") !== "dismissed"); } catch { setShowPlatformChoice(!standalone && !native && !isDesktopApp); }
 		    if (navigator.onLine) void getLatestPlatformReleaseDownloads().then(downloads => {
@@ -1186,13 +1183,6 @@ export default function Home() {
     setNotificationPermission(permission);
     if (permission === "granted") toast.success("Notificações do navegador ativadas.");
     else toast.error("Permita as notificações nas opções do navegador para receber avisos.");
-  };
-
-  const requestAppInstall = async () => {
-    if (!installPrompt) return;
-    await installPrompt.prompt();
-    await installPrompt.userChoice;
-    setInstallPrompt(null);
   };
 
 		  const createProfile = async (event: React.FormEvent<HTMLFormElement>) => {
