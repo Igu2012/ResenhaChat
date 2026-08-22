@@ -204,3 +204,4 @@
 - [x] Corrigir a cópia de conta para que contatos e mensagens persistam junto da foto de perfil entre aplicativo e navegador.
 - [x] Confirmar solicitações e mensagens offline somente depois que o aplicativo destinatário gravar os dados com sucesso.
 - [x] Criar duas contas de teste isoladas e validar contatos, mensagens, anexos, GIFs, figurinhas, convites e histórico de servidores entre dispositivos.
+- [x] Excluir somente as contas oficiais e os dados isolados criados pela validação automatizada de persistência.
