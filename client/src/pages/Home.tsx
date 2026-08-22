@@ -99,7 +99,6 @@ import { toast } from "sonner";
 
 type ActiveRoom = { kind: "dm" | "channel"; id: string; title: string; groupId?: string; partner?: LocalProfile };
 type ObservedCall = { room: string; participants: LocalProfile[]; startedAt: number | null };
-type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 type InstallPlatform = "android" | "ios" | "windows" | "linux" | "desktop";
 
 const MAX_LOCAL_FILE_BYTES = MAX_ATTACHMENT_BYTES;
