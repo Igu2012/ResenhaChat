@@ -196,3 +196,5 @@
 - [x] Adicionar atualização automática para Windows e Linux com metadados de release.
 - [ ] Assinar e notarizar a versão macOS para habilitar atualização automática no Mac.
 - [x] Substituir o texto superior “Continuar na web” por um botão X na tela de escolha de plataforma.
+- [ ] Corrigir a restauração de mensagens enviadas e recebidas depois de fechar e abrir o aplicativo.
+- [ ] Impedir que a descrição do perfil seja apagada durante a sincronização entre aplicativo e servidor.

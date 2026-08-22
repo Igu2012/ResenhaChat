@@ -654,13 +654,12 @@ export default function Home() {
         instance.connect();
       }
     };
-	    const recoverAfterResume = () => {
-	      if (document.visibilityState === "visible") {
-	        noteActivity(true);
-	        refreshPresence();
-	        void pullLatestOfficialStore();
-	      }
-	    };
+		    const recoverAfterResume = () => {
+		      if (document.visibilityState === "visible") {
+		        noteActivity(true);
+		        void pullLatestOfficialStore().finally(refreshPresence);
+		      }
+		    };
     const noteInteraction = () => noteActivity();
 	    const retryAfterExhaustion = () => window.setTimeout(() => instance.connect(), 1200);
 	    const refreshAfterConnectionError = () => {
@@ -683,7 +682,13 @@ export default function Home() {
 	      });
 	    };
 	    setSocket(instance);
-	    instance.on("connect", () => { noteActivity(true); refreshPresence(); void pullLatestOfficialStore(true); });
+		    instance.on("connect", () => {
+		      noteActivity(true);
+		      // A cópia do Drive precisa chegar antes de reenviar o perfil. Assim um
+		      // dispositivo que abriu com dados locais incompletos não propaga uma
+		      // descrição vazia nem um perfil antigo para os demais dispositivos.
+		      void pullLatestOfficialStore(true).finally(refreshPresence);
+		    });
 	    instance.on("connect_error", refreshAfterConnectionError);
     instance.on("disconnect", reason => {
       if (reason === "io server disconnect") instance.connect();
@@ -726,7 +731,12 @@ export default function Home() {
     });
 	    instance.on("profile:updated", ({ profile: updated }: { profile: LocalProfile }) => {
 	      if (!updated?.id) return;
-	      setStore(current => replaceProfileEverywhere(current, updated));
+	      setStore(current => {
+	        // Uma APK antiga pode reconectar com o campo bio vazio. Não deixe
+	        // esse perfil incompleto apagar a descrição que já está neste aparelho.
+	        if (updated.id === current.profile?.id && !updated.bio && current.profile.bio) return current;
+	        return replaceProfileEverywhere(current, updated);
+	      });
 	      setActiveRoom(current => current?.partner?.id === updated.id ? { ...current, partner: { ...current.partner, ...updated } } : current);
 	      setViewedProfile(current => current?.id === updated.id ? { ...current, ...updated } : current);
 	    });
@@ -748,7 +758,10 @@ export default function Home() {
 	        return { ...current, [readable.roomId]: { count: previous.count + 1, mentions: previous.mentions + (mention ? 1 : 0) } };
 	      });
 		      const ownMessage = sender.id === profileRef.current?.id;
-		      setStore(current => ({ ...current, contacts: ownMessage ? current.contacts : upsertContact(current.contacts, sender), messages: appendMessage(current.messages, readable) }));
+		      const current = storeRef.current;
+		      const persisted = persistStoreImmediately({ ...current, contacts: ownMessage ? current.contacts : upsertContact(current.contacts, sender), messages: appendMessage(current.messages, readable) });
+		      setStore(persisted);
+		      void syncOfficialStoreToDrive(persisted, true);
 		      if (!ownMessage) notifyIncomingMessage(sender, readable);
 		      return true;
 		    };
@@ -763,7 +776,10 @@ export default function Home() {
 	      const roomId = directRoomId(profileRef.current.id, sender.id);
 	      const inviteMessage: LocalMessage = { id: `invite:${request.id}`, roomId, author: sender, body: null, attachment: null, createdAt: request.createdAt, groupInvite: request };
 	      if (activeRoomRef.current?.id !== roomId) setUnreadRooms(current => ({ ...current, [roomId]: { count: (current[roomId]?.count || 0) + 1, mentions: current[roomId]?.mentions || 0 } }));
-	      setStore(current => ({ ...current, contacts: upsertContact(current.contacts, sender), messages: appendMessage(current.messages, inviteMessage) }));
+	      const current = storeRef.current;
+	      const persisted = persistStoreImmediately({ ...current, contacts: upsertContact(current.contacts, sender), messages: appendMessage(current.messages, inviteMessage) });
+	      setStore(persisted);
+	      void syncOfficialStoreToDrive(persisted, true);
 	      toast.info(`${sender.displayName} enviou um convite de servidor na conversa.`);
 	    });
     instance.on("group:invited", ({ group }: { group: LocalGroup }) => {
@@ -970,6 +986,11 @@ export default function Home() {
   }, []);
 
 		  const updateStore = (updater: (current: OrbitStore) => OrbitStore) => setStore(updater);
+		  const persistStoreImmediately = (next: OrbitStore) => {
+		    const saved = writeOrbitStore(next);
+		    if (saved.store.profile) setAccountVault(saveAccountSnapshot(saved.store));
+		    return saved.store;
+		  };
 
 		  const pullLatestOfficialStore = async (refreshMediaCache = false) => {
 		    const account = profileRef.current;
@@ -988,6 +1009,7 @@ export default function Home() {
 		      try { await restoreStoredKeyPair(account.id, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
 		      driveSyncRevisionRef.current = Math.max(driveSyncRevisionRef.current, remoteSnapshot.revision);
 		      const restored = mergeHydratedDriveMedia(applyOfficialSession(restoreAccountStore(remote.store, storeRef.current), { uid: account.id, username: account.username, idToken: account.authToken }), storeRef.current);
+		      profileRef.current = restored.profile;
 		      lastDriveSnapshotRef.current = JSON.stringify(redactOrbitStore(restored));
 		      setStore(restored);
 		      void cacheConnectedDriveMedia(remote.store, password, account.id, account.authToken);
@@ -1119,6 +1141,7 @@ export default function Home() {
 		            const remote = await decryptAccountSnapshot(password, result.snapshot);
 		            try { await restoreStoredKeyPair(nextAccount.id, remote.keyPair); } catch (error) { console.warn("Não foi possível restaurar as chaves do dispositivo.", error); }
 		            const restored = applyOfficialSession(restoreAccountStore(remote.store, next), { uid: nextAccount.id, username: nextAccount.username, idToken: nextAccount.authToken });
+		            profileRef.current = restored.profile;
 		            setStore(restored);
 		            next = queuedDriveSyncRef.current || restored;
 		            forceNextSnapshot = queuedForcedDriveSyncRef.current;
@@ -1588,9 +1611,9 @@ export default function Home() {
 	      return;
 	    }
 	    const outbound: LocalMessage = { ...message, body: null, attachment: null, encrypted };
-	    const storeWithMessage = { ...storeRef.current, messages: appendMessage(storeRef.current.messages, message) };
-	    setStore(storeWithMessage);
-	    void syncOfficialStoreToDrive(storeWithMessage, true);
+		    const storeWithMessage = persistStoreImmediately({ ...storeRef.current, messages: appendMessage(storeRef.current.messages, message) });
+		    setStore(storeWithMessage);
+		    void syncOfficialStoreToDrive(storeWithMessage, true);
 	        const attachmentRetention = attachmentRetentionClass(message.attachment);
 		        if (activeRoom.kind === "dm" && activeRoom.partner) socket.emit("direct:message", { recipientId: activeRoom.partner.id, message: outbound, attachmentRetention }, (result: { ok: boolean; message?: string }) => { if (result?.ok) signalSentMessage(); });
 		        if (activeRoom.kind === "channel" && selectedGroup) socket.emit("group:message", { recipientIds: selectedGroup.members.map(member => member.id), groupId: selectedGroup.id, message: outbound, attachmentRetention }, (result: { ok: boolean; message?: string }) => { if (result?.ok) signalSentMessage(); });
