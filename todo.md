@@ -189,3 +189,8 @@
 - [x] Exibir no Android escolhas claras para versão Android, versão iPhone e continuar na web.
 - [x] Preparar instaladores da Resenha Chat para Windows e Linux com atalho na área de trabalho.
 - [x] Permitir escolher microfone, câmera e saída de áudio nas versões de computador, mantendo notificações.
+- [ ] Corrigir a tela de escolha de plataforma para caber sem rolagem desnecessária, evitar download Android duplicado e responder ao toque no iPhone.
+- [ ] Adicionar opção de download para macOS na versão web de computador.
+- [ ] Gerar e arquivar de forma segura uma nova chave de assinatura Android para as próximas versões.
+- [ ] Gerar e publicar uma APK Android reemitida, mantendo a APK antiga disponível como versão anterior.
+- [ ] Adicionar atualização automática para Windows, Linux e macOS com arquivos incrementais de release.

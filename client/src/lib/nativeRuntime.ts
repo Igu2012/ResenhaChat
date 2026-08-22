@@ -108,7 +108,7 @@ type GitHubRelease = {
 };
 
 export type ReleaseDownload = { version: string | null; url: string | null };
-export type PlatformReleaseDownloads = { android: ReleaseDownload; ios: ReleaseDownload; windows: ReleaseDownload; linux: ReleaseDownload };
+export type PlatformReleaseDownloads = { android: ReleaseDownload; ios: ReleaseDownload; windows: ReleaseDownload; linux: ReleaseDownload; mac: ReleaseDownload };
 
 function normalizeVersion(version: string) {
   return version.trim().replace(/^v/i, "").split("-")[0].split(".").map(part => Number.parseInt(part, 10) || 0);
@@ -133,11 +133,13 @@ export function toPlatformReleaseDownloads(release: GitHubRelease): PlatformRele
     ?? release.assets?.find(asset => asset.name?.toLowerCase().endsWith(".exe"));
   const linux = release.assets?.find(asset => asset.name?.toLowerCase().endsWith(".appimage"))
     ?? release.assets?.find(asset => asset.name?.toLowerCase().endsWith(".deb"));
+  const mac = release.assets?.find(asset => asset.name?.toLowerCase().endsWith(".dmg"));
   return {
     android: { version: release.tag_name || null, url: apk?.browser_download_url || null },
     ios: { version: release.tag_name || null, url: ipa?.browser_download_url || null },
     windows: { version: release.tag_name || null, url: windows?.browser_download_url || null },
     linux: { version: release.tag_name || null, url: linux?.browser_download_url || null },
+    mac: { version: release.tag_name || null, url: mac?.browser_download_url || null },
   };
 }
 
@@ -155,6 +157,7 @@ export function toLatestPlatformReleaseDownloads(releases: GitHubRelease[]): Pla
     ios: findLatest("ios"),
     windows: findLatest("windows"),
     linux: findLatest("linux"),
+    mac: findLatest("mac"),
   };
 }
 

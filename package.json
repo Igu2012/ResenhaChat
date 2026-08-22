@@ -1,7 +1,7 @@
 {
   "name": "resenha-chat-client",
   "desktopName": "resenha-chat",
-  "version": "1.0.61",
+  "version": "1.0.62",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
@@ -24,7 +24,8 @@
     "desktop:run": "pnpm build && electron .",
     "desktop:package": "pnpm build && electron-builder --publish never",
     "desktop:package:windows": "pnpm build && electron-builder --win nsis --x64 --publish never",
-    "desktop:package:linux": "pnpm build && electron-builder --linux AppImage deb --x64 --publish never"
+    "desktop:package:linux": "pnpm build && electron-builder --linux AppImage deb --x64 --publish never",
+    "desktop:package:mac": "pnpm build && electron-builder --mac dmg zip --x64 --arm64 --publish never"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
@@ -40,6 +41,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^0.453.0",
     "next-themes": "^0.4.6",
     "react": "^19.2.1",
@@ -71,6 +73,13 @@
     "directories": {
       "output": "release-desktop"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Igu2012",
+        "repo": "ResenhaChat"
+      }
+    ],
     "files": [
       "dist/public/**/*",
       "electron/**/*",
@@ -81,7 +90,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "ResenhaChat-Setup-${version}.${ext}"
@@ -97,16 +108,33 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "deb",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "category": "Network",
       "syncDesktopName": true,
       "artifactName": "ResenhaChat-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "artifactName": "ResenhaChat-${version}-${arch}.${ext}"
     }
   }
 }

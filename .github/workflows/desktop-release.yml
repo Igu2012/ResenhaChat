@@ -31,7 +31,10 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
-          files: release-desktop/ResenhaChat-Setup-*.exe
+          files: |
+            release-desktop/ResenhaChat-Setup-*.exe
+            release-desktop/ResenhaChat-Setup-*.exe.blockmap
+            release-desktop/latest.yml
 
   linux:
     runs-on: ubuntu-latest
@@ -51,4 +54,29 @@ jobs:
           tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             release-desktop/ResenhaChat-*.AppImage
+            release-desktop/ResenhaChat-*.AppImage.blockmap
             release-desktop/ResenhaChat-*.deb
+            release-desktop/latest-linux.yml
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm desktop:package:mac
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: |
+            release-desktop/ResenhaChat-*.dmg
+            release-desktop/ResenhaChat-*.dmg.blockmap
+            release-desktop/ResenhaChat-*.zip
+            release-desktop/ResenhaChat-*.zip.blockmap
+            release-desktop/latest-mac.yml

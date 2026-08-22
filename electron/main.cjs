@@ -1,4 +1,5 @@
 const { app, BrowserWindow } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -36,9 +37,18 @@ function createWindow() {
   window.loadFile(path.join(app.getAppPath(), "dist", "public", "index.html"));
 }
 
+function startAutoUpdater() {
+  if (!app.isPackaged) return;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on("error", () => undefined);
+  setTimeout(() => { void autoUpdater.checkForUpdatesAndNotify().catch(() => undefined); }, 10_000);
+}
+
 app.whenReady().then(() => {
   createLinuxDesktopShortcut();
   createWindow();
+  startAutoUpdater();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
